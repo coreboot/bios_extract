@@ -6,7 +6,7 @@
 **
 ***********************************************/
 
-#include	<stdio.h>
+#include <stdio.h>
 
 #ifdef __LINUX_NOW__
     #define SftPlatform         "Linux"
@@ -14,4 +14,4 @@
     #define SftPlatform         "DOS32"
 #endif
 
-#define SftVersion      "0.31e ("SftPlatform")"
+#define SftVersion "0.31e ("SftPlatform")"
