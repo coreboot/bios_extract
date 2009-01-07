@@ -35,19 +35,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-
-#if defined(LINUX) || defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD_kernel__)
 #include <memory.h>
-#define IDSign "+"
-#else
-#include <mem.h>
-#include <conio.h>
-#define IDSign ""
-#endif
-
-typedef unsigned char   byte;
-typedef unsigned short  word;
-typedef unsigned long   dword;
+#include <inttypes.h>
 
 #define Xtract  0x10
 #define List    0x01
@@ -59,88 +48,88 @@ typedef unsigned long   dword;
 typedef struct {
     FILE *infile;
     FILE *outfile;
-    unsigned long original;
-    unsigned long packed;
+    uint32_t original;
+    uint32_t packed;
     int dicbit;
     int method;
 } interfacing;
 
 typedef struct {
-    byte    Version[4];
-    word    CRCLen;
-    dword   CRC32;
-    word    BeginLo;
-    word    BeginHi;
+    uint8_t    Version[4];
+    uint16_t    CRCLen;
+    uint32_t   CRC32;
+    uint16_t    BeginLo;
+    uint16_t    BeginHi;
 } ABCTag;
 
 typedef struct
 {
-    word    PrePartLo;      /*      Previous part LO word   */
-    word    PrePartHi;      /*      Previous part HI word   */
+    uint16_t    PrePartLo;      /*      Previous part LO uint16_t   */
+    uint16_t    PrePartHi;      /*      Previous part HI uint16_t   */
     /*      value 0xFFFFFFFF = last */
-    word    CSize;          /*      This module header Len  */
-    byte    PartID;         /*      ID for this header      */
-    byte    IsComprs;       /*      Value 0x80 means that
+    uint16_t    CSize;          /*      This module header Len  */
+    uint8_t    PartID;         /*      ID for this header      */
+    uint8_t    IsComprs;       /*      Value 0x80 means that
 				    this module not
 				    compressed, 0x00 - is   */
-    dword   RealCS;         /*      Address in RAM where
+    uint32_t   RealCS;         /*      Address in RAM where
 				    expand to               */
-    dword   ROMSize;        /*      Compressed Len          */
-    dword   ExpSize;        /*      Expanded Len            */
+    uint32_t   ROMSize;        /*      Compressed Len          */
+    uint32_t   ExpSize;        /*      Expanded Len            */
 } PARTTag;
 
 typedef struct
 {
-    byte    HeadLen;
-    byte    HeadCrc;
-    byte    Method[5];
-    dword   PackLen;
-    dword   RealLen;
-    dword   TStamp;
-    byte    Attr;
-    byte    Level;
-    byte    FilenameLen;
-    byte    FileName[12];
-    word    CRC16;
-    byte    DOS;
-    word    Empty;
+    uint8_t    HeadLen;
+    uint8_t    HeadCrc;
+    uint8_t    Method[5];
+    uint32_t   PackLen;
+    uint32_t   RealLen;
+    uint32_t   TStamp;
+    uint8_t    Attr;
+    uint8_t    Level;
+    uint8_t    FilenameLen;
+    uint8_t    FileName[12];
+    uint16_t    CRC16;
+    uint8_t    DOS;
+    uint16_t    Empty;
 } LZHHead;
 
 typedef struct
 {
-    word    PackLenLo;
-    word    PackLenHi;
-    word    RealLenLo;
-    word    RealLenHi;
+    uint16_t    PackLenLo;
+    uint16_t    PackLenHi;
+    uint16_t    RealLenLo;
+    uint16_t    RealLenHi;
 } BIOS94;
 
 typedef struct
 {
-    byte    Month[2];
-    byte    rsrv1;
-    byte    Day[2];
-    byte    rsrv2;
-    byte    Year[2];
+    uint8_t    Month[2];
+    uint8_t    rsrv1;
+    uint8_t    Day[2];
+    uint8_t    rsrv2;
+    uint8_t    Year[2];
 } AMIDATE;
 
 typedef struct
 {
-    dword Offset;
-    byte  ModID;
-    byte  IsPacked;
+    uint32_t Offset;
+    uint8_t  ModID;
+    uint8_t  IsPacked;
 } AMIHEAD94;
 
 #define SftName "AmiBIOSDeco"
 #define SftEMail "Anton Borisov, anton.borisov@gmail.com"
 
 /********SoftWare*************/
-byte CopyRights[] = "\n(C) Anton Borisov, 2000, 2002-2003, 2006. Portions (C) 1999-2000";
-byte Url[] = "Bug-reports direct to "SftEMail;
+uint8_t CopyRights[] = "\n(C) Anton Borisov, 2000, 2002-2003, 2006. Portions (C) 1999-2000";
+uint8_t Url[] = "Bug-reports direct to "SftEMail;
 
 #define SftVersion "0.31e"
 
-byte
-StrLen(byte *Str)
+uint8_t
+StrLen(uint8_t *Str)
 {
     int i = 0;
 
@@ -149,21 +138,21 @@ StrLen(byte *Str)
     return(i);
 };
 
-byte
-StrCmp(byte *Dst, byte *Src)
+uint8_t
+StrCmp(uint8_t *Dst, uint8_t *Src)
 {
-    byte i;
+    uint8_t i;
     for(i = 0; i <= StrLen(Src); i++)
 	if(Dst[i] != Src[i])
 	    return(1);
     return(0);
 }
 
-byte
-HelpSystem(byte argc, byte *argv[])
+uint8_t
+HelpSystem(uint8_t argc, uint8_t *argv[])
 {
-    byte x;
-    byte ID = 0;
+    uint8_t x;
+    uint8_t ID = 0;
 
     for (x = 1; x < argc; x++) {
 	if (StrCmp(argv[x], "-h") == 0) {
@@ -175,7 +164,7 @@ HelpSystem(byte argc, byte *argv[])
 		   ""SftName" performs on 386 or better CPU systems\n"
 		   "under control of LinuxOS\n\n"
 		   "Compression schemes include: LZINT\n\n"
-		   "Modules marked with "IDSign" sign are compressed modules\n\n"
+		   "Modules marked with ""+"" sign are compressed modules\n\n"
 		   "\tBug reports mailto: "SftEMail"\n"
 		   "\t\tCompiled: %s, %s with \n\t\t%s",__DATE__,__TIME__,__VERSION__);
 	    printf("\n");
@@ -194,7 +183,7 @@ HelpSystem(byte argc, byte *argv[])
 }
 
 void
-PrintHeader(byte* EOL)
+PrintHeader(uint8_t* EOL)
 {
     printf("\n%c%s%c%s", 0x4, "-="SftName", version "SftVersion"=-", 0x4, EOL);
 }
@@ -215,7 +204,7 @@ PrintUsage()
     printf("\n\n\t*%s*\n",Url);
 }
 
-byte *RecordList[] = {
+uint8_t *RecordList[] = {
     "POST",
     "Setup Server",
     "Runtime",
@@ -292,7 +281,7 @@ byte *RecordList[] = {
 };
 
 
-byte* GetModuleName(byte ID)
+uint8_t* GetModuleName(uint8_t ID)
 {
     /* -------------- New Name Conventions -------------- */
 
@@ -409,10 +398,10 @@ byte* GetModuleName(byte ID)
     }
 }
 
-byte *
-GetFullDate(byte *mon, byte *day, byte *year)
+uint8_t *
+GetFullDate(uint8_t *mon, uint8_t *day, uint8_t *year)
 {
-    byte *Months[] = {"",
+    uint8_t *Months[] = {"",
 		    "January",
 		    "February",
 		    "March",
@@ -425,7 +414,7 @@ GetFullDate(byte *mon, byte *day, byte *year)
 		    "October",
 		    "November",
 		    "December"};
-    byte Buf[20];
+    uint8_t Buf[20];
     sprintf(Buf, "%2.2s", year);
 
     if((atoi(Buf) >= 0) && (atoi(Buf) < 70))
@@ -440,11 +429,11 @@ GetFullDate(byte *mon, byte *day, byte *year)
         FindHook
 ----------------------------------*/
 
-dword
-FoundAt(FILE *ptx, byte *Buf, byte *Pattern, dword BLOCK_LEN)
+uint32_t
+FoundAt(FILE *ptx, uint8_t *Buf, uint8_t *Pattern, uint32_t BLOCK_LEN)
 {
-    dword i, Ret;
-    word Len;
+    uint32_t i, Ret;
+    uint16_t Len;
     Len = StrLen(Pattern);
 
     for (i = 0; i < BLOCK_LEN - 0x80; i++) {
@@ -459,21 +448,21 @@ FoundAt(FILE *ptx, byte *Buf, byte *Pattern, dword BLOCK_LEN)
 /*---------------------------------
         Xtract95
 ----------------------------------*/
-byte
-Xtract95(FILE *ptx, byte Action, dword ConstOff, dword Offset, byte* fname)
+uint8_t
+Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, uint8_t* fname)
 {
     FILE *pto;
     interfacing interface;
-    byte PartTotal = 0;
+    uint8_t PartTotal = 0;
     PARTTag part;
-    byte Buf[64];
-    byte MyDirName[64]     =       "--DECO--";
-    dword i;
-    byte sLen = 0;
+    uint8_t Buf[64];
+    uint8_t MyDirName[64]     =       "--DECO--";
+    uint32_t i;
+    uint8_t sLen = 0;
 
-    byte doDir   = 0;
+    uint8_t doDir   = 0;
     /* For the case of multiple 0x20 modules */
-    byte Multiple = 0, j = 0;
+    uint8_t Multiple = 0, j = 0;
 
     sLen = StrLen(fname);
     for (i = sLen; i > 0; i--)
@@ -519,7 +508,7 @@ Xtract95(FILE *ptx, byte Action, dword ConstOff, dword Offset, byte* fname)
 		   (part.IsComprs!=0x80) ? (part.ROMSize) : (part.CSize),
 		   (part.IsComprs!=0x80) ? (part.ExpSize) : (part.CSize),
 		   (part.IsComprs!=0x80) ? (part.ExpSize) : (part.CSize),
-		   (part.IsComprs!=0x80) ? (IDSign) : (" "),
+		   (part.IsComprs!=0x80) ? ("+") : (" "),
 		   Offset-ConstOff);
 	    break;
 	case Xtract: /* Xtracting Part */
@@ -561,7 +550,7 @@ Xtract95(FILE *ptx, byte Action, dword ConstOff, dword Offset, byte* fname)
 	    break;
 	}
 
-	Offset = ((dword)part.PrePartHi << 4) + (dword)part.PrePartLo;
+	Offset = ((uint32_t)part.PrePartHi << 4) + (uint32_t)part.PrePartLo;
     }
 
     return (PartTotal);
@@ -570,15 +559,15 @@ Xtract95(FILE *ptx, byte Action, dword ConstOff, dword Offset, byte* fname)
 /*---------------------------------
         Xtract0725
 ----------------------------------*/
-byte
-Xtract0725(FILE *ptx, byte Action, dword Offset)
+uint8_t
+Xtract0725(FILE *ptx, uint8_t Action, uint32_t Offset)
 {
     BIOS94 b94;
     FILE *pto;
     interfacing interface;
-    byte Buf[12];
-    byte PartTotal = 0;
-    byte Module = 0;
+    uint8_t Buf[12];
+    uint8_t PartTotal = 0;
+    uint8_t Module = 0;
 
     while((b94.PackLenLo != 0x0000 || b94.RealLenLo != 0x0000) && PartTotal < 0x80) {
 	fseek(ptx, Offset, 0);
@@ -622,22 +611,22 @@ Xtract0725(FILE *ptx, byte Action, dword Offset)
 /*---------------------------------
         Xtract1010
 ----------------------------------*/
-byte
-Xtract1010(FILE *ptx, byte Action, dword Offset)
+uint8_t
+Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 {
     FILE *pto;
-    word ModsInHead = 0;
-    word GlobalMods = 0;
+    uint16_t ModsInHead = 0;
+    uint16_t GlobalMods = 0;
     PARTTag *Mods94;
     BIOS94 ModHead;
-    word Tmp;
-    dword i, ii;
+    uint16_t Tmp;
+    uint32_t i, ii;
     interfacing interface;
-    byte Buf[12];
-    byte Module = 0;
+    uint8_t Buf[12];
+    uint8_t Module = 0;
 
     fseek(ptx, 0x10, 0);
-    fread(&ModsInHead, 1, sizeof(word), ptx);
+    fread(&ModsInHead, 1, sizeof(uint16_t), ptx);
     GlobalMods = ModsInHead - 1;
 
     Mods94 = (PARTTag*) calloc(ModsInHead, sizeof(PARTTag));
@@ -665,7 +654,7 @@ Xtract1010(FILE *ptx, byte Action, dword Offset)
 	    fseek(ptx, Mods94[i].RealCS, 0);
 	    fread(&ModHead, 1, sizeof(ModHead), ptx);
 	    printf("\n%.2s %.2X (%17.17s) %5.5lX (%5.5lu) => %5.5lX (%5.5lu), %5.5lXh",
-		   (Mods94[i].IsComprs == 0) ? (IDSign) : (" "),
+		   (Mods94[i].IsComprs == 0) ? ("+") : (" "),
 		   Mods94[i].PartID,
 		   (StrCmp(RecordList[Mods94[i].PartID],"") == 0) ? ("UserDefined") : (RecordList[Mods94[i].PartID]),
 		   (Mods94[i].IsComprs == 1) ? (0x10000 - Mods94[i].RealCS) : (ModHead.PackLenLo),
@@ -722,7 +711,7 @@ Xtract1010(FILE *ptx, byte Action, dword Offset)
 
 	    if(Mods94[i].IsComprs == 1) {
 		fseek(ptx, -8L, 1);
-		for(ii = 0; ii < (0x10000 - (dword) Mods94[i].RealCS); ii++) {
+		for(ii = 0; ii < (0x10000 - (uint32_t) Mods94[i].RealCS); ii++) {
 		    fread(&Buf[0], 1, 1, ptx);
 		    fwrite(&Buf[0], 1, 1, pto);
 		};
@@ -779,24 +768,24 @@ Xtract1010(FILE *ptx, byte Action, dword Offset)
 }
 
 int
-main(byte argc, byte *argv[])
+main(uint8_t argc, uint8_t *argv[])
 {
     FILE *ptx, *pto;
-    dword fLen, i, RealRead = 0;
-    byte Temp[] = "AMIBIOSC", *BufBlk;
-    byte Buf[12];
-    byte BufAdd[0x30];
+    uint32_t fLen, i, RealRead = 0;
+    uint8_t Temp[] = "AMIBIOSC", *BufBlk;
+    uint8_t Buf[12];
+    uint8_t BufAdd[0x30];
     ABCTag abc;
 
-    dword ConstOff, Offset, BODYOff = 0;
+    uint32_t ConstOff, Offset, BODYOff = 0;
     LZHHead FHead;
 
-    byte AMIVer = 0;
+    uint8_t AMIVer = 0;
     AMIDATE amidate;
 
-    byte PartTotal = 0;
-    byte Action = 0;
-    byte HelpID = 0;
+    uint8_t PartTotal = 0;
+    uint8_t Action = 0;
+    uint8_t HelpID = 0;
 
     HelpID = HelpSystem(argc,argv);
     switch (HelpID & 0x7F) {
@@ -824,11 +813,11 @@ main(byte argc, byte *argv[])
     fseek( ptx, 0, 2 );
     fLen = ftell(ptx);
     rewind(ptx);
-    printf("FileLength\t: %lX (%lu bytes)\n", fLen, fLen);
+    printf("FileLength\t: %lX (%lu uint8_ts)\n", fLen, fLen);
     printf("FileName\t: %s\n", argv[1]);
 
     /*------- Memory Alloc --------*/
-    if(!(BufBlk = (byte *) calloc(BLOCK, sizeof(byte))))
+    if(!(BufBlk = (uint8_t *) calloc(BLOCK, sizeof(uint8_t))))
 	exit(1);
     i = 0;
 
@@ -863,8 +852,8 @@ main(byte argc, byte *argv[])
 	fread(&amidate, 1, sizeof(amidate), ptx);
 
 	printf("\nVersion\t\t: %.4s", abc.Version);
-	printf("\nPacked Data\t: %lX (%lu bytes)", (dword) abc.CRCLen * 8, (dword) abc.CRCLen * 8);
-	printf("\nStart\t\t: %lX", Offset = ((dword) abc.BeginHi << 4) + (dword) abc.BeginLo);
+	printf("\nPacked Data\t: %lX (%lu bytes)", (uint32_t) abc.CRCLen * 8, (uint32_t) abc.CRCLen * 8);
+	printf("\nStart\t\t: %lX", Offset = ((uint32_t) abc.BeginHi << 4) + (uint32_t) abc.BeginLo);
 
 	BODYOff = fLen - ( 0x100000 - ( Offset + 8 + sizeof(abc)) ) - 8 - sizeof(abc);
 	printf("\nPacked Offset\t: %lX", BODYOff);
