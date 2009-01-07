@@ -8,7 +8,7 @@ MAKE = make
 all: amideco
 
 amideco: amifunc kernel
-	gcc amideco.c amifunc.o kernel.o -s -fpack-struct -o amideco
+	gcc amideco.c amifunc.o kernel.o -fpack-struct -o amideco
 
 amifunc:
 	gcc amifunc.c -c -o amifunc.o -fpack-struct
