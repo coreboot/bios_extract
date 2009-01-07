@@ -33,20 +33,11 @@
 #define TBIT 5
 #define NPT 0x80
 
-unsigned long origsize, compsize;
-unsigned short dicbit;
-unsigned short maxmatch;
-unsigned long count;
-unsigned short loc;
-unsigned char *text;
-
-static unsigned short dicsiz;
+unsigned long compsize;
 
 static unsigned char  subbitbuf, bitcount;
 
-unsigned short crc, bitbuf;
-int prev_char;
-long reading_size;
+unsigned short bitbuf;
 
 unsigned short left[2 * NC - 1], right[2 * NC - 1];
 unsigned char c_len[NC], pt_len[NPT];
@@ -54,7 +45,7 @@ unsigned short c_table[4096], c_code[NC],
 	      pt_table[256], pt_code[NPT];
 static unsigned short blocksize;
 
-FILE *infile, *outfile;
+FILE *infile;
 
 static short c, n, tblsiz, len, depth, maxdepth, avail;
 static unsigned short codeword, bit, *tbl;
@@ -347,20 +338,16 @@ decode_start_st1(void)
 }
 
 /********end of decode***********************/
-
 void
-decode(interfacing interface)
+decode(FILE *packed_file, int packed_size, FILE *orig_file, uint32_t orig_size)
 {
-    int i, j, k, c, dicsiz1, offset;
+    int i, j, k, c, dicsiz1, offset, count, loc;
+    unsigned char *text;
+    unsigned short dicsiz = 1 << 13;
 
-    infile = interface.infile;
-    outfile = interface.outfile;
-    dicbit = interface.dicbit;
-    origsize = interface.original;
-    compsize = interface.packed;
-    crc = 0;
-    prev_char = -1;
-    dicsiz = 1 << dicbit;
+    infile = packed_file;
+    compsize = packed_size;
+
     text = (unsigned char *) malloc(dicsiz);
 
     if (text == NULL)
@@ -373,14 +360,14 @@ decode(interfacing interface)
     offset = 0x100 - 3;
     count = 0;
     loc = 0;
-    while (count < origsize) {
+    while (count < orig_size) {
 
 	c = decode_c_st1();
 
 	if (c <= UCHAR_MAX) {
 	    text[loc++] = c;
 	    if (loc == dicsiz) {
-		fwrite_crc(text, dicsiz, outfile);
+		fwrite_crc(text, dicsiz, orig_file);
 		loc = 0;
 	    }
 	    count++;
@@ -392,13 +379,13 @@ decode(interfacing interface)
 		c = text[(i + k) & dicsiz1];
 		text[loc++] = c;
 		if (loc == dicsiz) {
-		    fwrite_crc(text, dicsiz, outfile);
+		    fwrite_crc(text, dicsiz, orig_file);
 		    loc = 0;
 		}
 	    }
 	}
     }
     if (loc != 0)
-	fwrite_crc(text, loc, outfile);
+	fwrite_crc(text, loc, orig_file);
     free(text);
 }

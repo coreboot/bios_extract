@@ -418,7 +418,6 @@ uint8_t
 Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fname)
 {
     FILE *pto;
-    interfacing interface;
     uint8_t PartTotal = 0;
     PARTTag part;
     char Buf[64];
@@ -495,16 +494,8 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fn
 		exit(1);
 	    }
 
-	    interface.infile = ptx;
-	    interface.outfile = pto;
-	    interface.original = part.ExpSize ;
-	    interface.packed = part.ROMSize;
-
-	    interface.dicbit = 13;
-	    interface.method = 5;
-
 	    if (part.IsComprs != 0x80)
-                decode(interface);
+                decode(ptx, part.ROMSize, pto, part.ExpSize);
 	    else {
 		fseek(ptx, -8L, 1);
 		for (i = 0; i < part.CSize; i++) {
@@ -530,7 +521,6 @@ Xtract0725(FILE *ptx, uint8_t Action, uint32_t Offset)
 {
     BIOS94 b94;
     FILE *pto;
-    interfacing interface;
     char Buf[12];
     uint8_t PartTotal = 0;
     uint8_t Module = 0;
@@ -551,16 +541,7 @@ Xtract0725(FILE *ptx, uint8_t Action, uint32_t Offset)
 	case Xtract: /* Xtracting Part */
 	    sprintf(Buf,"amibody.%.2x", Module++);
 	    pto = fopen(Buf, "wb");
-
-	    interface.infile = ptx;
-	    interface.outfile = pto;
-
-	    interface.original = b94.RealLenLo;
-	    interface.packed = b94.PackLenLo;
-	    interface.dicbit = 13;
-	    interface.method = 5;
-
-	    decode(interface);
+	    decode(ptx, b94.PackLenLo, pto, b94.RealLenLo);
 	    fclose(pto);
 	    break;
 	}
@@ -587,7 +568,6 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
     BIOS94 ModHead;
     uint16_t Tmp;
     uint32_t i, ii;
-    interfacing interface;
     char Buf[12];
     uint8_t Module = 0;
 
@@ -667,14 +647,6 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 		exit(1);
 	    }
 
-	    interface.infile = ptx;
-	    interface.outfile = pto;
-
-	    interface.original = ModHead.RealLenLo;
-	    interface.packed = ModHead.PackLenLo;
-	    interface.dicbit = 13;
-	    interface.method = 5;
-
 	    if(Mods94[i].IsComprs == 1) {
 		fseek(ptx, -8L, 1);
 		for(ii = 0; ii < (0x10000 - (uint32_t) Mods94[i].RealCS); ii++) {
@@ -682,7 +654,7 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 		    fwrite(&Buf[0], 1, 1, pto);
 		};
 	    } else
-		decode(interface);
+		decode(ptx, ModHead.PackLenLo, pto, ModHead.RealLenLo);
 	    fclose(pto);
 	}
 
@@ -710,14 +682,7 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 		    exit(1);
 		}
 
-		interface.infile = ptx;
-		interface.outfile = pto;
-		interface.original = ModHead.RealLenLo;
-		interface.packed = ModHead.PackLenLo;
-		interface.dicbit = 13;
-		interface.method = 5;
-
-		decode(interface);
+		decode(ptx, ModHead.PackLenLo, pto, ModHead.RealLenLo);
 		fclose(pto);
 
 		Offset += ModHead.PackLenLo;
@@ -832,7 +797,8 @@ main(int argc, char *argv[])
 	if (atoi(amidate.Day) == 10 && atoi(amidate.Month) == 10) {
 	    Offset = 0x30;
 	    AMIVer = 10;
-	} else Offset = 0x10;
+	} else
+	    Offset = 0x10;
 	fseek(ptx, -11L, 2);
 	fread(&amidate, 1, sizeof(amidate), ptx);
 	break;

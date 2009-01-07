@@ -1,10 +1,2 @@
-typedef struct {
-    FILE *infile;
-    FILE *outfile;
-    uint32_t original;
-    uint32_t packed;
-    int dicbit;
-    int method;
-} interfacing;
+void decode(FILE *packed_file, int packed_size, FILE *orig_file, uint32_t orig_size);
 
-void decode(interfacing interface);
