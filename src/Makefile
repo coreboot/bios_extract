@@ -4,24 +4,22 @@
 #
 
 MAKE = make
+CFLAGS = -g -fpack-struct
+CC = gcc
+OBJS = amifunc.o kernel.o amideco.o
+
+.o: $*.c
+	$(CC) $(CFLAGS) -c $*.c
 
 all: amideco
 
-amideco: amifunc kernel
-	gcc amideco.c amifunc.o kernel.o -fpack-struct -o amideco
-
-amifunc:
-	gcc amifunc.c -c -o amifunc.o -fpack-struct
-
-kernel:
-	gcc kernel.c -c -o kernel.o -fpack-struct
+amideco: $(OBJS)
+	$(CC) $(CFLAGS) $(OBJS) -o amideco
 
 clean: 
 	rm -f *.o
 	rm -f amideco
 
 rebuild:
-	make clean
-	make amifunc
-	make kernel
-	make amideco
+	$(MAKE) clean
+	$(MAKE) amideco

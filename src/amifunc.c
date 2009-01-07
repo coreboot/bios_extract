@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "amideco.h"
+
 #if defined(LINUX) || defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD_kernel__)
 # include <memory.h>
 # define IDSign "+"
@@ -19,82 +21,12 @@
 # define IDSign ""
 #endif
 
-typedef unsigned char   byte;
-typedef unsigned short  word;
-typedef unsigned long   dword;
-
 #define Xtract  0x10
 #define List    0x01
 #define Delete  0x12
 #define XtractD 0x13
 
 #define BLOCK   0x8000
-
-typedef struct {
-    FILE *infile;
-    FILE *outfile;
-    unsigned long original;
-    unsigned long packed;
-    int dicbit;
-    int method;
-} interfacing;
-
-typedef struct {
-    byte    Version[4];
-    word    CRCLen;
-    dword   CRC32;
-    word    BeginLo;
-    word    BeginHi;
-} ABCTag;
-
-typedef struct {
-    word PrePartLo; /* Previous part LO word */
-    word PrePartHi; /* Previous part HI word */
-                    /* value 0xFFFFFFFF = last */
-    word CSize;     /* This module header Len  */
-    byte PartID;    /* ID for this header */
-    byte IsComprs;  /* Value 0x80 means that this module not compressed, 0x00 - is */
-    dword RealCS;   /* Address in RAM where expand to */
-    dword ROMSize;  /* Compressed Len */
-    dword ExpSize;  /* Expanded Len */
-} PARTTag;
-
-typedef struct {
-    byte    HeadLen;
-    byte    HeadCrc;
-    byte    Method[5];
-    dword   PackLen;
-    dword   RealLen;
-    dword   TStamp;
-    byte    Attr;
-    byte    Level;
-    byte    FilenameLen;
-    byte    FileName[12];
-    word    CRC16;
-    byte    DOS;
-    word    Empty;
-} LZHHead;
-
-typedef struct {
-    word    PackLenLo;
-    word    PackLenHi;
-    word    RealLenLo;
-    word    RealLenHi;
-} BIOS94;
-
-typedef struct {
-    byte    Month[2];
-    byte    rsrv1;
-    byte    Day[2];
-    byte    rsrv2;
-    byte    Year[2];
-} AMIDATE;
-
-typedef struct {
-    dword Offset;
-    byte  ModID;
-    byte  IsPacked;
-} AMIHEAD94;
 
 byte *RecordList[] = {
     "POST",

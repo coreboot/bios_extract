@@ -15,7 +15,6 @@
 #if defined(LINUX) || defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD_kernel__)
 #include <memory.h>
 #define IDSign "+"
-#define __LINUX_NOW__
 #else
 #include <mem.h>
 #include <conio.h>
