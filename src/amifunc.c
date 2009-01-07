@@ -31,7 +31,6 @@ typedef unsigned long   dword;
 
 #ifndef __LINUX_NOW__
     #define IDSign              ""
-    
 #else
     #define     IDSign          "+"
 #endif
@@ -178,7 +177,7 @@ byte* GetModuleName(byte ID)
                 case 0x12: return("Configuration");
                 case 0x13: return("DMI Code");
                 case 0x14: return("System Health");
-                
+
 		case 0x15: return("Memory Sizing");
 		case 0x16: return("Memory Test");
 		case 0x17: return("Debug");
@@ -186,7 +185,7 @@ byte* GetModuleName(byte ID)
 		case 0x19: return("ADM Font");
 		case 0x1A: return("Small Logo");
 		case 0x1B: return("SLAB");
-		
+
                 case 0x20: return("PCI AddOn ROM");
                 case 0x21: return("Multilanguage");
                 case 0x22: return("UserDefined");
@@ -207,13 +206,13 @@ byte* GetModuleName(byte ID)
                 case 0x35: return("Action Logo Data");
                 case 0x36: return("Virus");
                 case 0x37: return("Online Menu");
-		
+
 		case 0x38: return("Lang1 as ROM");
 		case 0x39: return("Lang2 as ROM");
 		case 0x3A: return("Lang3 as ROM");
-		
+
 		case 0x70: return("OSD Bitmaps");
-		
+
                 default: return("User-Defined ;)");
 
                 }
@@ -304,7 +303,7 @@ byte Xtract95(FILE *ptx, byte Action, dword ConstOff, dword Offset, byte* fname)
         memcpy(MyDirName, (fname + i), sLen - i);
         for ( i = 0; i < StrLen(MyDirName); i++ )
             if (MyDirName[i] == '.' ) MyDirName[i] = '\x0';
-           
+
         sprintf(MyDirName, "%s.---", MyDirName);
         printf("\nDirName\t\t: %s", MyDirName);
 
