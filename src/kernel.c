@@ -10,6 +10,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
+#include <inttypes.h>
+
+#include "kernel.h"
 
 #define UCHAR_MAX ((1 << (sizeof(unsigned char) * 8)) - 1)
 #define CHAR_BIT  8
@@ -49,21 +52,9 @@ unsigned short left[2 * NC - 1], right[2 * NC - 1];
 unsigned char c_len[NC], pt_len[NPT];
 unsigned short c_table[4096], c_code[NC],
 	      pt_table[256], pt_code[NPT];
-static unsigned char *buf;
-static unsigned short bufsiz;
 static unsigned short blocksize;
 
 FILE *infile, *outfile;
-
-typedef struct {
-    FILE *infile;
-    FILE *outfile;
-    unsigned long original;
-    unsigned long packed;
-    int dicbit;
-    int method;
-} interfacing ;
-
 
 static short c, n, tblsiz, len, depth, maxdepth, avail;
 static unsigned short codeword, bit, *tbl;
@@ -80,9 +71,14 @@ mktbl(void)
     if (len == depth) {
 	while (++c < n)
 	    if (blen[c] == len) {
-		i = codeword;  codeword += bit;
-		if (codeword > tblsiz) { printf("\nBad Table!"); exit(1); }
-		while (i < codeword) tbl[i++] = c;
+		i = codeword;
+		codeword += bit;
+		if (codeword > tblsiz) {
+		    printf("\nBad Table!");
+		    exit(1);
+		}
+		while (i < codeword)
+		    tbl[i++] = c;
 		return c;
 	    }
 	c = -1;

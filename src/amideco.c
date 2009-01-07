@@ -38,21 +38,18 @@
 #include <memory.h>
 #include <inttypes.h>
 
+/* for mkdir */
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#include "kernel.h"
+
 #define Xtract  0x10
 #define List    0x01
 #define Delete  0x12
 #define XtractD 0x13
 
 #define BLOCK   0x8000
-
-typedef struct {
-    FILE *infile;
-    FILE *outfile;
-    uint32_t original;
-    uint32_t packed;
-    int dicbit;
-    int method;
-} interfacing;
 
 typedef struct {
     uint8_t    Version[4];
@@ -105,11 +102,11 @@ typedef struct
 
 typedef struct
 {
-    uint8_t    Month[2];
-    uint8_t    rsrv1;
-    uint8_t    Day[2];
-    uint8_t    rsrv2;
-    uint8_t    Year[2];
+    char Month[2];
+    char rsrv1;
+    char Day[2];
+    char rsrv2;
+    char Year[2];
 } AMIDATE;
 
 typedef struct
@@ -129,33 +126,13 @@ uint8_t Url[] = "Bug-reports direct to "SftEMail;
 #define SftVersion "0.31e"
 
 uint8_t
-StrLen(uint8_t *Str)
-{
-    int i = 0;
-
-    while( *(Str+i) != 0x0 )
-	i++;
-    return(i);
-};
-
-uint8_t
-StrCmp(uint8_t *Dst, uint8_t *Src)
-{
-    uint8_t i;
-    for(i = 0; i <= StrLen(Src); i++)
-	if(Dst[i] != Src[i])
-	    return(1);
-    return(0);
-}
-
-uint8_t
-HelpSystem(uint8_t argc, uint8_t *argv[])
+HelpSystem(int argc, char *argv[])
 {
     uint8_t x;
     uint8_t ID = 0;
 
     for (x = 1; x < argc; x++) {
-	if (StrCmp(argv[x], "-h") == 0) {
+	if (strcmp(argv[x], "-h") == 0) {
 	    printf("\n"SftName" HelpSystem Starting Now!\n");
 	    printf("\nThis Program Version Number %s",SftVersion);
 	    printf(
@@ -170,11 +147,11 @@ HelpSystem(uint8_t argc, uint8_t *argv[])
 	    printf("\n");
 	    return( 0x20 );
 	}
-	if (StrCmp(argv[x], "-x") == 0)
+	if (strcmp(argv[x], "-x") == 0)
 	    ID = ID ^ 0x10;
-	if (StrCmp(argv[x], "-l") == 0)
+	if (strcmp(argv[x], "-l") == 0)
 	    ID = ID ^ 0x01;
-	if (StrCmp(argv[x], "-d") == 0)
+	if (strcmp(argv[x], "-d") == 0)
 	    ID = ID ^ 0x80;
     }
 
@@ -183,7 +160,7 @@ HelpSystem(uint8_t argc, uint8_t *argv[])
 }
 
 void
-PrintHeader(uint8_t* EOL)
+PrintHeader(char *EOL)
 {
     printf("\n%c%s%c%s", 0x4, "-="SftName", version "SftVersion"=-", 0x4, EOL);
 }
@@ -204,7 +181,7 @@ PrintUsage()
     printf("\n\n\t*%s*\n",Url);
 }
 
-uint8_t *RecordList[] = {
+char *RecordList[] = {
     "POST",
     "Setup Server",
     "Runtime",
@@ -281,7 +258,7 @@ uint8_t *RecordList[] = {
 };
 
 
-uint8_t* GetModuleName(uint8_t ID)
+char * GetModuleName(uint8_t ID)
 {
     /* -------------- New Name Conventions -------------- */
 
@@ -398,31 +375,20 @@ uint8_t* GetModuleName(uint8_t ID)
     }
 }
 
-uint8_t *
-GetFullDate(uint8_t *mon, uint8_t *day, uint8_t *year)
+uint32_t
+DateParse(char *month, char *day, char *year)
 {
-    uint8_t *Months[] = {"",
-		    "January",
-		    "February",
-		    "March",
-		    "April",
-		    "May",
-		    "June",
-		    "July",
-		    "August",
-		    "September",
-		    "October",
-		    "November",
-		    "December"};
-    uint8_t Buf[20];
-    sprintf(Buf, "%2.2s", year);
+    /* old logic:
+       sprintf(Buf, "%2.2s", year);
 
-    if((atoi(Buf) >= 0) && (atoi(Buf) < 70))
-	sprintf(Buf, "%.2s %s %s%.2s", day, Months[atoi(mon)], "20", year);
-    else
-	sprintf(Buf, "%.2s %s %s%.2s", day, Months[atoi(mon)], "19", year);
-
-    return(Buf);
+       if ((atoi(Buf) >= 0) && (atoi(Buf) < 70))
+           sprintf(Buf, "%.2s %s %s%.2s", day, Months[atoi(mon)], "20", year);
+       else
+	   sprintf(Buf, "%.2s %s %s%.2s", day, Months[atoi(mon)], "19", year);
+    */
+    return (((strtol(year, NULL, 10) & 0xFFFF) << 16) |
+	    ((strtol(month, NULL, 10) & 0xFF) << 8) |
+	    (strtol(day, NULL, 10) & 0xFF));
 }
 
 /*---------------------------------
@@ -430,11 +396,11 @@ GetFullDate(uint8_t *mon, uint8_t *day, uint8_t *year)
 ----------------------------------*/
 
 uint32_t
-FoundAt(FILE *ptx, uint8_t *Buf, uint8_t *Pattern, uint32_t BLOCK_LEN)
+FoundAt(FILE *ptx, char *Buf, char *Pattern, uint32_t BLOCK_LEN)
 {
     uint32_t i, Ret;
     uint16_t Len;
-    Len = StrLen(Pattern);
+    Len = strlen(Pattern);
 
     for (i = 0; i < BLOCK_LEN - 0x80; i++) {
 	if(memcmp(Buf + i, Pattern, Len) == 0) {
@@ -449,22 +415,22 @@ FoundAt(FILE *ptx, uint8_t *Buf, uint8_t *Pattern, uint32_t BLOCK_LEN)
         Xtract95
 ----------------------------------*/
 uint8_t
-Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, uint8_t* fname)
+Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fname)
 {
     FILE *pto;
     interfacing interface;
     uint8_t PartTotal = 0;
     PARTTag part;
-    uint8_t Buf[64];
-    uint8_t MyDirName[64]     =       "--DECO--";
+    char Buf[64];
+    char MyDirName[64] = "--DECO--";
     uint32_t i;
     uint8_t sLen = 0;
 
     uint8_t doDir   = 0;
     /* For the case of multiple 0x20 modules */
-    uint8_t Multiple = 0, j = 0;
+    uint8_t Multiple = 0;
 
-    sLen = StrLen(fname);
+    sLen = strlen(fname);
     for (i = sLen; i > 0; i--)
 	if(*(fname + i) == '/' || *(fname + i ) == '\\') {
 	    i++;
@@ -472,7 +438,7 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, uint8_t*
 	}
 
     memcpy(MyDirName, (fname + i), sLen - i);
-    for (i = 0; i < StrLen(MyDirName); i++)
+    for (i = 0; i < strlen(MyDirName); i++)
 	if (MyDirName[i] == '.' )
 	    MyDirName[i] = '\x0';
 
@@ -502,7 +468,7 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, uint8_t*
 
 	switch(Action){
 	case List:
-	    printf("\n   %.2X %.2i (%17.17s)    %5.5lX (%6.5lu) => %5.5lX (%6.5lu)  %.2s   %5.5lXh",
+	    printf("\n   %.2X %.2i (%17.17s)    %5.5X (%6.5u) => %5.5X (%6.5u)  %.2s   %5.5Xh",
 		   part.PartID, PartTotal, GetModuleName(part.PartID),
 		   (part.IsComprs!=0x80) ? (part.ROMSize) : (part.CSize),
 		   (part.IsComprs!=0x80) ? (part.ROMSize) : (part.CSize),
@@ -524,7 +490,7 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, uint8_t*
 		    sprintf(Buf,"amibody.%.2x", part.PartID);
 	    }
 
-	    if ((pto = fopen(Buf,"wb")) == NULL) {
+	    if ((pto = fopen(Buf, "wb")) == NULL) {
 		printf("\nFile %s I/O error..Exit", Buf);
 		exit(1);
 	    }
@@ -565,7 +531,7 @@ Xtract0725(FILE *ptx, uint8_t Action, uint32_t Offset)
     BIOS94 b94;
     FILE *pto;
     interfacing interface;
-    uint8_t Buf[12];
+    char Buf[12];
     uint8_t PartTotal = 0;
     uint8_t Module = 0;
 
@@ -583,8 +549,8 @@ Xtract0725(FILE *ptx, uint8_t Action, uint32_t Offset)
 	    break;
 
 	case Xtract: /* Xtracting Part */
-	    sprintf(Buf,"amibody.%.2x",Module++);
-	    pto = fopen(Buf,"wb");
+	    sprintf(Buf,"amibody.%.2x", Module++);
+	    pto = fopen(Buf, "wb");
 
 	    interface.infile = ptx;
 	    interface.outfile = pto;
@@ -622,7 +588,7 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
     uint16_t Tmp;
     uint32_t i, ii;
     interfacing interface;
-    uint8_t Buf[12];
+    char Buf[12];
     uint8_t Module = 0;
 
     fseek(ptx, 0x10, 0);
@@ -653,10 +619,10 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 	for (i = 1; i < ModsInHead; i++) {
 	    fseek(ptx, Mods94[i].RealCS, 0);
 	    fread(&ModHead, 1, sizeof(ModHead), ptx);
-	    printf("\n%.2s %.2X (%17.17s) %5.5lX (%5.5lu) => %5.5lX (%5.5lu), %5.5lXh",
+	    printf("\n%.2s %.2X (%17.17s) %5.5X (%5.5u) => %5.5X (%5.5u), %5.5Xh",
 		   (Mods94[i].IsComprs == 0) ? ("+") : (" "),
 		   Mods94[i].PartID,
-		   (StrCmp(RecordList[Mods94[i].PartID],"") == 0) ? ("UserDefined") : (RecordList[Mods94[i].PartID]),
+		   (strcmp(RecordList[Mods94[i].PartID], "") == 0) ? "UserDefined" : RecordList[Mods94[i].PartID],
 		   (Mods94[i].IsComprs == 1) ? (0x10000 - Mods94[i].RealCS) : (ModHead.PackLenLo),
 		   (Mods94[i].IsComprs == 1) ? (0x10000 - Mods94[i].RealCS) : (ModHead.PackLenLo),
 		   (Mods94[i].IsComprs == 1) ? (0x10000 - Mods94[i].RealCS) : (ModHead.RealLenLo),
@@ -674,7 +640,7 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 		if ((ModHead.RealLenHi == 0xFFFF) && (ModHead.PackLenHi == 0xFFFF) && ((Offset % 0x1000) != 0))
 		    Offset = 0x1000 * ( Offset / 0x1000 );
 	    } else {
-		printf("\nNext Module (%i): %5.5X (%5.5u) => %5.5X (%5.5u),  %5.5lXh",
+		printf("\nNext Module (%i): %5.5X (%5.5u) => %5.5X (%5.5u),  %5.5Xh",
 		       GlobalMods,
 		       ModHead.PackLenLo,
 		       ModHead.PackLenLo,
@@ -694,10 +660,10 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 	    fseek(ptx, Mods94[i].RealCS, 0);
 	    fread(&ModHead, 1, sizeof(ModHead), ptx);
 
-	    sprintf(Buf,"amibody.%.2x",Module++);
-	    pto = fopen(Buf,"wb");
+	    sprintf(Buf, "amibody.%.2x", Module++);
+	    pto = fopen(Buf, "wb");
 	    if (!pto) {
-		printf("\nFile %s I/O Error..Exit");
+		printf("\nFile %s I/O Error..Exit", Buf);
 		exit(1);
 	    }
 
@@ -736,11 +702,11 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 		continue;
 	    } else {
 		GlobalMods++;
-		sprintf(Buf,"amibody.%.2x",Module++);
+		sprintf(Buf, "amibody.%.2x", Module++);
 
 		pto = fopen(Buf,"wb");
 		if(!pto) {
-		    printf("\nFile %s I/O Error..Exit");
+		    printf("\nFile %s I/O Error..Exit", Buf);
 		    exit(1);
 		}
 
@@ -768,17 +734,15 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 }
 
 int
-main(uint8_t argc, uint8_t *argv[])
+main(int argc, char *argv[])
 {
-    FILE *ptx, *pto;
+    FILE *ptx;
     uint32_t fLen, i, RealRead = 0;
-    uint8_t Temp[] = "AMIBIOSC", *BufBlk;
-    uint8_t Buf[12];
-    uint8_t BufAdd[0x30];
+    char Temp[] = "AMIBIOSC", *BufBlk;
+    char Buf[12];
     ABCTag abc;
 
     uint32_t ConstOff, Offset, BODYOff = 0;
-    LZHHead FHead;
 
     uint8_t AMIVer = 0;
     AMIDATE amidate;
@@ -813,11 +777,12 @@ main(uint8_t argc, uint8_t *argv[])
     fseek( ptx, 0, 2 );
     fLen = ftell(ptx);
     rewind(ptx);
-    printf("FileLength\t: %lX (%lu uint8_ts)\n", fLen, fLen);
+    printf("FileLength\t: %X (%u bytes)\n", fLen, fLen);
     printf("FileName\t: %s\n", argv[1]);
 
     /*------- Memory Alloc --------*/
-    if(!(BufBlk = (uint8_t *) calloc(BLOCK, sizeof(uint8_t))))
+    BufBlk = (char *) calloc(BLOCK, 1);
+    if(!BufBlk)
 	exit(1);
     i = 0;
 
@@ -852,14 +817,14 @@ main(uint8_t argc, uint8_t *argv[])
 	fread(&amidate, 1, sizeof(amidate), ptx);
 
 	printf("\nVersion\t\t: %.4s", abc.Version);
-	printf("\nPacked Data\t: %lX (%lu bytes)", (uint32_t) abc.CRCLen * 8, (uint32_t) abc.CRCLen * 8);
-	printf("\nStart\t\t: %lX", Offset = ((uint32_t) abc.BeginHi << 4) + (uint32_t) abc.BeginLo);
+	printf("\nPacked Data\t: %X (%u bytes)", (uint32_t) abc.CRCLen * 8, (uint32_t) abc.CRCLen * 8);
+	printf("\nStart\t\t: %X", Offset = ((uint32_t) abc.BeginHi << 4) + (uint32_t) abc.BeginLo);
 
 	BODYOff = fLen - ( 0x100000 - ( Offset + 8 + sizeof(abc)) ) - 8 - sizeof(abc);
-	printf("\nPacked Offset\t: %lX", BODYOff);
+	printf("\nPacked Offset\t: %X", BODYOff);
 
 	ConstOff = Offset - BODYOff;
-	printf("\nOffset\t\t: %lX", ConstOff);
+	printf("\nOffset\t\t: %X", ConstOff);
 
 	break;
     case 94:
@@ -872,7 +837,7 @@ main(uint8_t argc, uint8_t *argv[])
 	fread(&amidate, 1, sizeof(amidate), ptx);
 	break;
     };
-    printf("\nReleased\t: %s", GetFullDate(amidate.Month, amidate.Day, amidate.Year));
+    printf("\nReleased\t: %8d", DateParse(amidate.Month, amidate.Day, amidate.Year));
 
     switch (AMIVer) {
     case 95:

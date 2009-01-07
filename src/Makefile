@@ -4,7 +4,7 @@
 #
 
 MAKE = make
-CFLAGS = -g -fpack-struct
+CFLAGS = -g -fpack-struct -Wall
 CC = gcc
 OBJS = kernel.o amideco.o
 
