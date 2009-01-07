@@ -10,7 +10,7 @@
 #include        <stdio.h>
 #include        <stdlib.h>
 
-#if defined(LINUX) || defined(__LINUX__) || defined(__linux__)
+#if defined(LINUX) || defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD_kernel__)
     #include    <memory.h>
     #define     __LINUX_NOW__
 #else
