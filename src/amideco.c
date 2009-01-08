@@ -461,7 +461,7 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fn
 	   );
 
     while((part.PrePartLo != 0xFFFF || part.PrePartHi != 0xFFFF) && PartTotal < 0x80) {
-	fseek(ptx, Offset-ConstOff, 0);
+	fseek(ptx, Offset-ConstOff, SEEK_SET);
 	fread(&part, 1, sizeof(part), ptx);
 	PartTotal++;
 
@@ -497,7 +497,7 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fn
 	    if (part.IsComprs != 0x80)
                 decode(ptx, part.ROMSize, pto, part.ExpSize);
 	    else {
-		fseek(ptx, -8L, 1);
+		fseek(ptx, -8L, SEEK_CUR);
 		for (i = 0; i < part.CSize; i++) {
 		    fread(&Buf[0], 1, 1, ptx);
 		    fwrite(&Buf[0], 1, 1, pto);
@@ -526,7 +526,7 @@ Xtract0725(FILE *ptx, uint8_t Action, uint32_t Offset)
     uint8_t Module = 0;
 
     while((b94.PackLenLo != 0x0000 || b94.RealLenLo != 0x0000) && PartTotal < 0x80) {
-	fseek(ptx, Offset, 0);
+	fseek(ptx, Offset, SEEK_SET);
 	fread(&b94, 1, sizeof(b94), ptx);
 
 	if(b94.PackLenLo==0x0000 && b94.RealLenLo==0x0000)
@@ -571,14 +571,14 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
     char Buf[12];
     uint8_t Module = 0;
 
-    fseek(ptx, 0x10, 0);
+    fseek(ptx, 0x10, SEEK_SET);
     fread(&ModsInHead, 1, sizeof(uint16_t), ptx);
     GlobalMods = ModsInHead - 1;
 
     Mods94 = (PARTTag*) calloc(ModsInHead, sizeof(PARTTag));
 
     for (i = 0; i < ModsInHead; i++) {
-	fseek(ptx, 0x14 + i*4, 0);
+	fseek(ptx, 0x14 + i*4, SEEK_SET);
 	fread(&Tmp, 1, sizeof(Tmp), ptx);
 
 	if (i == 0)
@@ -597,7 +597,7 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
     case List:
 	printf("\n\nModules According to HeaderInfo: %i\n", ModsInHead);
 	for (i = 1; i < ModsInHead; i++) {
-	    fseek(ptx, Mods94[i].RealCS, 0);
+	    fseek(ptx, Mods94[i].RealCS, SEEK_SET);
 	    fread(&ModHead, 1, sizeof(ModHead), ptx);
 	    printf("\n%.2s %.2X (%17.17s) %5.5X (%5.5u) => %5.5X (%5.5u), %5.5Xh",
 		   (Mods94[i].IsComprs == 0) ? ("+") : (" "),
@@ -612,7 +612,7 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 
 	Offset = 0x10000;
 	while(Offset <= Mods94[0].RealCS) {
-	    fseek(ptx, Offset, 0);
+	    fseek(ptx, Offset, SEEK_SET);
 	    fread(&ModHead, 1, sizeof(ModHead), ptx);
 
 	    if(ModHead.RealLenHi && ModHead.PackLenHi) {
@@ -637,7 +637,7 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
     case Xtract: /* Xtracting Part */
 
 	for(i = 0; i < ModsInHead; i++) {
-	    fseek(ptx, Mods94[i].RealCS, 0);
+	    fseek(ptx, Mods94[i].RealCS, SEEK_SET);
 	    fread(&ModHead, 1, sizeof(ModHead), ptx);
 
 	    sprintf(Buf, "amibody.%.2x", Module++);
@@ -648,7 +648,7 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 	    }
 
 	    if(Mods94[i].IsComprs == 1) {
-		fseek(ptx, -8L, 1);
+		fseek(ptx, -8L, SEEK_CUR);
 		for(ii = 0; ii < (0x10000 - (uint32_t) Mods94[i].RealCS); ii++) {
 		    fread(&Buf[0], 1, 1, ptx);
 		    fwrite(&Buf[0], 1, 1, pto);
@@ -662,7 +662,7 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 
 	Offset = 0x10000;
 	while(Offset < Mods94[0].RealCS) {
-	    fseek(ptx, Offset, 0);
+	    fseek(ptx, Offset, SEEK_SET);
 	    fread(&ModHead, 1, sizeof(ModHead), ptx);
 
 	    if(ModHead.RealLenHi && ModHead.PackLenHi) {
@@ -716,7 +716,7 @@ main(int argc, char *argv[])
     uint8_t Action = 0;
     uint8_t HelpID = 0;
 
-    HelpID = HelpSystem(argc,argv);
+    HelpID = HelpSystem(argc, argv);
     switch (HelpID & 0x7F) {
     case 0x20:
 	return 0;
@@ -739,7 +739,7 @@ main(int argc, char *argv[])
 
     PrintHeader("\n\n");
 
-    fseek( ptx, 0, 2 );
+    fseek(ptx, 0, SEEK_END);
     fLen = ftell(ptx);
     rewind(ptx);
     printf("FileLength\t: %X (%u bytes)\n", fLen, fLen);
@@ -752,10 +752,10 @@ main(int argc, char *argv[])
     i = 0;
 
     while (!feof(ptx)) {
-	fseek(ptx, i, 0);
+	fseek(ptx, i, SEEK_SET);
 	RealRead = fread(BufBlk, 1, BLOCK, ptx);
 	if ((i = FoundAt(ptx, BufBlk, Temp, RealRead) ) != 0) {
-	    fseek(ptx, i + 8, 0);
+	    fseek(ptx, i + 8, SEEK_SET);
 	    fread(&abc, 1, sizeof(abc), ptx);
 	    AMIVer = 95;
 	    break;
@@ -778,7 +778,7 @@ main(int argc, char *argv[])
 
     switch (AMIVer) {
     case 95:
-	fseek(ptx, -11L, 2);
+	fseek(ptx, -11L, SEEK_END);
 	fread(&amidate, 1, sizeof(amidate), ptx);
 
 	printf("\nVersion\t\t: %.4s", abc.Version);
@@ -799,7 +799,7 @@ main(int argc, char *argv[])
 	    AMIVer = 10;
 	} else
 	    Offset = 0x10;
-	fseek(ptx, -11L, 2);
+	fseek(ptx, -11L, SEEK_END);
 	fread(&amidate, 1, sizeof(amidate), ptx);
 	break;
     };
