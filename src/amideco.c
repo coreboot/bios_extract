@@ -72,15 +72,7 @@ typedef struct
     char Year[2];
 } AMIDATE;
 
-#define SftName "AmiBIOSDeco"
-#define SftEMail "Anton Borisov, anton.borisov@gmail.com"
-
-/********SoftWare*************/
-uint8_t CopyRights[] = "\n(C) Anton Borisov, 2000, 2002-2003, 2006. Portions (C) 1999-2000";
-uint8_t Url[] = "Bug-reports direct to "SftEMail;
-
-#define SftVersion "0.31e"
-
+#define VERSION "0.32"
 
 #define ACT_NONE    0
 #define ACT_EXTRACT 1
@@ -91,8 +83,8 @@ static char *FileName = NULL;
 static void
 HelpPrint(char *name)
 {
-    printf("%s Version %s \n\n", SftName, SftVersion);
-    printf("Program to extract AMI Bios images (AMIBIOS '94 and '95).\n");
+    printf("%s version %s \n\n", name, VERSION);
+    printf("Program to extract AMI Bios images (AMIBIOS '94 and '95).\n\n");
     printf("Usage: %s <action> <filename>\n", name);
     printf("Actions:\n");
     printf("\"l\"\tList Bios Structure.\n");
@@ -500,8 +492,6 @@ main(int argc, char *argv[])
     uint8_t PartTotal = 0;
 
     ArgumentsParse(argc, argv);
-
-    printf("\n%s, version %s\n\n", SftName, SftVersion);
 
     ptx = fopen(FileName, "rb");
     if (!ptx) {
