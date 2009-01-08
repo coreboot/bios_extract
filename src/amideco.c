@@ -158,200 +158,86 @@ PrintUsage()
     printf("\n\n\t*%s*\n",Url);
 }
 
-static char *
-RecordList[] = {
-    "POST",
-    "Setup Server",
-    "Runtime",
-    "DIM",
-    "Setup Client",
-    "Remote Server",
-    "DMI Data",
-    "GreenPC",
-    "Interface",
-    "MP",
-    "Notebook",
-    "Int-10",
-    "ROM-ID",
-    "Int-13",
-    "OEM Logo",
-    "ACPI Table",
-    "ACPI AML",
-    "P6 MicroCode",
-    "Configuration",
-    "DMI Code",
-    "System Health",
-    "UserDefined",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "","",
-    "PCI AddOn ROM",
-    "Multilanguage",
-    "UserDefined",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "Font Database",
-    "OEM Logo Data",
-    "Graphic Logo Code",
-    "Graphic Logo Data",
-    "Action Logo Code",
-    "Action Logo Data",
-    "Virus",
-    "Online Menu",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    ""
+#define FALSE 0
+#define TRUE  1
+
+struct ModuleName
+{
+    uint8_t Id;
+    int V95;
+    char *Name;
 };
 
+static struct ModuleName
+ModuleNames[] = {
+    {0x00, TRUE, "POST"},
+    {0x01, FALSE, "Setup Server"},
+    {0x02, FALSE, "RunTime"},
+    {0x03, FALSE, "DIM"},
+    {0x04, FALSE, "Setup Client"},
+    {0x05, FALSE, "Remote Server"},
+    {0x06, FALSE, "DMI Data"},
+    {0x07, FALSE, "Green PC"},
+    {0x08, FALSE, "Interface"},
+    {0x09, FALSE, "MP"},
+    {0x0A, FALSE, "Notebook"},
+    {0x0B, FALSE, "Int-10"},
+    {0x0C, FALSE, "ROM-ID"},
+    {0x0D, FALSE, "Int-13"},
+    {0x0E, FALSE, "OEM Logo"},
+    {0x0F, FALSE, "ACPI Table"},
+    {0x10, FALSE, "ACPI AML"},
+    {0x11, FALSE, "P6 Microcode"},
+    {0x12, FALSE, "Configuration"},
+    {0x13, FALSE, "DMI Code"},
+    {0x14, FALSE, "System Health"},
+    {0x15, FALSE, "Memory Sizing"},
+    {0x16, TRUE,  "Memory Test"},
+    {0x17, TRUE,  "Debug"},
+    {0x18, TRUE,  "ADM (Display MGR)"},
+    {0x19, TRUE,  "ADM Font"},
+    {0x1A, TRUE,  "Small Logo"},
+    {0x1B, TRUE,  "SLAB"},
+    {0x20, FALSE, "PCI AddOn ROM"},
+    {0x21, FALSE, "Multilanguage"},
+    {0x22, FALSE, "UserDefined"},
+    {0x23, TRUE,  "ASCII Font"},
+    {0x24, TRUE,  "BIG5 Font"},
+    {0x25, TRUE,  "OEM Logo"},
+    {0x2A, TRUE,  "User ROM"},
+    {0x2B, TRUE,  "PXE Code"},
+    {0x2C, TRUE,  "AMI Font"},
+    {0x2E, TRUE,  "User ROM"},
+    {0x2D, TRUE,  "Battery Refresh"},
+    {0x30, FALSE, "Font Database"},
+    {0x31, FALSE, "OEM Logo Data"},
+    {0x32, FALSE, "Graphic Logo Code"},
+    {0x33, FALSE, "Graphic Logo Data"},
+    {0x34, FALSE, "Action Logo Code"},
+    {0x35, FALSE, "Action Logo Data"},
+    {0x36, FALSE, "Virus"},
+    {0x37, FALSE, "Online Menu"},
+    {0x38, TRUE,  "Lang1 as ROM"},
+    {0x39, TRUE,  "Lang2 as ROM"},
+    {0x3A, TRUE,  "Lang3 as ROM"},
+    {0x70, TRUE,  "OSD Bitmaps"},
+    {0, FALSE, NULL}
+};
 
 static char *
-GetModuleName(uint8_t ID)
+ModuleNameGet(uint8_t ID, int V95)
 {
-    /* -------------- New Name Conventions -------------- */
+    int i;
 
-    switch(ID){
-    case 0x00:
-	return("POST");
-    case 0x01:
-	return("Setup Server");
-    case 0x02:
-	return("RunTime");
-    case 0x03:
-	return("DIM");
-    case 0x04:
-	return("Setup Client");
-    case 0x05:
-	return("Remote Server");
-    case 0x06:
-	return("DMI Data");
-    case 0x07:
-	return("Green PC");
-    case 0x08:
-	return("Interface");
-    case 0x09:
-	return("MP");
-    case 0x0A:
-	return("Notebook");
-    case 0x0B:
-	return("Int-10");
-    case 0x0C:
-	return("ROM-ID");
-    case 0x0D:
-	return("Int-13");
-    case 0x0E:
-	return("OEM Logo");
-    case 0x0F:
-	return("ACPI Table");
-    case 0x10:
-	return("ACPI AML");
-    case 0x11:
-	return("P6 Microcode");
-    case 0x12:
-	return("Configuration");
-    case 0x13:
-	return("DMI Code");
-    case 0x14:
-	return("System Health");
-    case 0x15:
-	return("Memory Sizing");
-    case 0x16:
-	return("Memory Test");
-    case 0x17:
-	return("Debug");
-    case 0x18:
-	return("ADM (Display MGR)");
-    case 0x19:
-	return("ADM Font");
-    case 0x1A:
-	return("Small Logo");
-    case 0x1B:
-	return("SLAB");
+    for (i = 0; ModuleNames[i].Name; i++)
+	if (ModuleNames[i].Id == ID) {
+	    if (!V95 && ModuleNames[i].V95)
+		return "";
+	    else
+		return ModuleNames[i].Name;
+	}
 
-    case 0x20:
-	return("PCI AddOn ROM");
-    case 0x21:
-	return("Multilanguage");
-    case 0x22:
-	return("UserDefined");
-    case 0x23:
-	return("ASCII Font");
-    case 0x24:
-	return("BIG5 Font");
-    case 0x25:
-	return("OEM Logo");
-    case 0x2A:
-	return("User ROM");
-    case 0x2B:
-	return("PXE Code");
-    case 0x2C:
-	return("AMI Font");
-    case 0x2E:
-	return("User ROM");
-    case 0x2D:
-	return("Battery Refresh");
-
-    case 0x30:
-	return("Font Database");
-    case 0x31:
-	return("OEM Logo Data");
-    case 0x32:
-	return("Graphic Logo Code");
-    case 0x33:
-	return("Graphic Logo Data");
-    case 0x34:
-	return("Action Logo Code");
-    case 0x35:
-	return("Action Logo Data");
-    case 0x36:
-	return("Virus");
-    case 0x37:
-	return("Online Menu");
-    case 0x38:
-	return("Lang1 as ROM");
-    case 0x39:
-	return("Lang2 as ROM");
-    case 0x3A:
-	return("Lang3 as ROM");
-
-    case 0x70:
-	return("OSD Bitmaps");
-
-    default:
-	return("User-Defined ;)");
-
-    }
+    return "";
 }
 
 /*---------------------------------
@@ -431,7 +317,7 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fn
 	switch(Action){
 	case List:
 	    printf("\n   %.2X %.2i (%17.17s)    %5.5X (%6.5u) => %5.5X (%6.5u)  %.2s   %5.5Xh",
-		   part.PartID, PartTotal, GetModuleName(part.PartID),
+		   part.PartID, PartTotal, ModuleNameGet(part.PartID, TRUE),
 		   (part.IsComprs!=0x80) ? (part.ROMSize) : (part.CSize),
 		   (part.IsComprs!=0x80) ? (part.ROMSize) : (part.CSize),
 		   (part.IsComprs!=0x80) ? (part.ExpSize) : (part.CSize),
@@ -513,7 +399,7 @@ Xtract0725(FILE *ptx, uint8_t Action, uint32_t Offset)
 
     }
     printf("\n\nThis Scheme Usually Contains: \n\t%s\n\t%s\n\t%s",
-	   RecordList[0], RecordList[1], RecordList[2]);
+	   ModuleNames[0].Name, ModuleNames[1].Name, ModuleNames[2].Name);
 
     return (PartTotal);
 }
@@ -564,8 +450,7 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 	    fread(&ModHead, 1, sizeof(ModHead), ptx);
 	    printf("\n%.2s %.2X (%17.17s) %5.5X (%5.5u) => %5.5X (%5.5u), %5.5Xh",
 		   (Mods94[i].IsComprs == 0) ? ("+") : (" "),
-		   Mods94[i].PartID,
-		   (strcmp(RecordList[Mods94[i].PartID], "") == 0) ? "UserDefined" : RecordList[Mods94[i].PartID],
+		   Mods94[i].PartID, ModuleNameGet(Mods94[i].PartID, FALSE),
 		   (Mods94[i].IsComprs == 1) ? (0x10000 - Mods94[i].RealCS) : (ModHead.PackLenLo),
 		   (Mods94[i].IsComprs == 1) ? (0x10000 - Mods94[i].RealCS) : (ModHead.PackLenLo),
 		   (Mods94[i].IsComprs == 1) ? (0x10000 - Mods94[i].RealCS) : (ModHead.RealLenLo),
@@ -628,7 +513,7 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 	    fseek(ptx, Offset, SEEK_SET);
 	    fread(&ModHead, 1, sizeof(ModHead), ptx);
 
-	    if(ModHead.RealLenHi && ModHead.PackLenHi) {
+	    if (ModHead.RealLenHi && ModHead.PackLenHi) {
 		Offset += 0x1000;
 		if ((ModHead.RealLenHi == 0xFFFF) && (ModHead.PackLenHi == 0xFFFF) && ((Offset % 0x1000) != 0)) {
 		    Offset = 0x1000 * (Offset/0x1000);
@@ -690,7 +575,7 @@ main(int argc, char *argv[])
 	return 0;
     }
 
-    if(!(ptx = fopen(argv[1],"rb"))) {
+    if (!(ptx = fopen(argv[1],"rb"))) {
 	printf("\nFile %s opening error...\n", argv[1]);
 	return 0;
     };
@@ -723,7 +608,7 @@ main(int argc, char *argv[])
 
 	    ABCOffset = FoundAt(ptx, BufBlk, Temp, RealRead);
 	    if (ABCOffset != 0) {
-		printf("AMIBIOS 95 header found at offset 0x%08X\n", ABCOffset);
+		printf("AMIBIOS 95 header found at offset 0x%05X\n", ABCOffset);
 		AMIVer = 95;
 		break;
 	    }
