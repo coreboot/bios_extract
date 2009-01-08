@@ -125,7 +125,7 @@ uint8_t Url[] = "Bug-reports direct to "SftEMail;
 
 #define SftVersion "0.31e"
 
-uint8_t
+static uint8_t
 HelpSystem(int argc, char *argv[])
 {
     uint8_t x;
@@ -159,13 +159,13 @@ HelpSystem(int argc, char *argv[])
     return(0);
 }
 
-void
+static void
 PrintHeader(char *EOL)
 {
     printf("\n%c%s%c%s", 0x4, "-="SftName", version "SftVersion"=-", 0x4, EOL);
 }
 
-void
+static void
 PrintUsage()
 {
     PrintHeader("");
@@ -181,7 +181,8 @@ PrintUsage()
     printf("\n\n\t*%s*\n",Url);
 }
 
-char *RecordList[] = {
+static char *
+RecordList[] = {
     "POST",
     "Setup Server",
     "Runtime",
@@ -258,7 +259,8 @@ char *RecordList[] = {
 };
 
 
-char * GetModuleName(uint8_t ID)
+static char *
+GetModuleName(uint8_t ID)
 {
     /* -------------- New Name Conventions -------------- */
 
@@ -375,27 +377,11 @@ char * GetModuleName(uint8_t ID)
     }
 }
 
-uint32_t
-DateParse(char *month, char *day, char *year)
-{
-    /* old logic:
-       sprintf(Buf, "%2.2s", year);
-
-       if ((atoi(Buf) >= 0) && (atoi(Buf) < 70))
-           sprintf(Buf, "%.2s %s %s%.2s", day, Months[atoi(mon)], "20", year);
-       else
-	   sprintf(Buf, "%.2s %s %s%.2s", day, Months[atoi(mon)], "19", year);
-    */
-    return (((strtol(year, NULL, 10) & 0xFFFF) << 16) |
-	    ((strtol(month, NULL, 10) & 0xFF) << 8) |
-	    (strtol(day, NULL, 10) & 0xFF));
-}
-
 /*---------------------------------
         FindHook
 ----------------------------------*/
 
-uint32_t
+static uint32_t
 FoundAt(FILE *ptx, char *Buf, char *Pattern, uint32_t BLOCK_LEN)
 {
     uint32_t i, Ret;
@@ -414,7 +400,7 @@ FoundAt(FILE *ptx, char *Buf, char *Pattern, uint32_t BLOCK_LEN)
 /*---------------------------------
         Xtract95
 ----------------------------------*/
-uint8_t
+static uint8_t
 Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fname)
 {
     FILE *pto;
@@ -516,7 +502,7 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fn
 /*---------------------------------
         Xtract0725
 ----------------------------------*/
-uint8_t
+static uint8_t
 Xtract0725(FILE *ptx, uint8_t Action, uint32_t Offset)
 {
     BIOS94 b94;
@@ -558,7 +544,7 @@ Xtract0725(FILE *ptx, uint8_t Action, uint32_t Offset)
 /*---------------------------------
         Xtract1010
 ----------------------------------*/
-uint8_t
+static uint8_t
 Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 {
     FILE *pto;
@@ -706,11 +692,10 @@ main(int argc, char *argv[])
     char Temp[] = "AMIBIOSC", *BufBlk;
     char Buf[12];
     ABCTag abc;
-
+    char Date[9];
     uint32_t ConstOff, Offset, BODYOff = 0;
 
     uint8_t AMIVer = 0;
-    AMIDATE amidate;
 
     uint8_t PartTotal = 0;
     uint8_t Action = 0;
@@ -765,7 +750,7 @@ main(int argc, char *argv[])
 
     if (AMIVer != 95) {
 	printf("AMI'95 hook not found..Turning to AMI'94\n");
-	rewind(ptx);
+	fseek(ptx, 0, SEEK_SET);
 	fread(&Buf, 1, 8, ptx);
 	if(memcmp(Buf, Temp, 8) != 0) {
 	    printf("Obviously not even AMIBIOS standard..Exit\n");
@@ -778,9 +763,6 @@ main(int argc, char *argv[])
 
     switch (AMIVer) {
     case 95:
-	fseek(ptx, -11L, SEEK_END);
-	fread(&amidate, 1, sizeof(amidate), ptx);
-
 	printf("\nVersion\t\t: %.4s", abc.Version);
 	printf("\nPacked Data\t: %X (%u bytes)", (uint32_t) abc.CRCLen * 8, (uint32_t) abc.CRCLen * 8);
 	printf("\nStart\t\t: %X", Offset = ((uint32_t) abc.BeginHi << 4) + (uint32_t) abc.BeginLo);
@@ -793,17 +775,24 @@ main(int argc, char *argv[])
 
 	break;
     case 94:
-	fread(&amidate, 1, sizeof(amidate), ptx);
-	if (atoi(amidate.Day) == 10 && atoi(amidate.Month) == 10) {
-	    Offset = 0x30;
-	    AMIVer = 10;
-	} else
-	    Offset = 0x10;
-	fseek(ptx, -11L, SEEK_END);
-	fread(&amidate, 1, sizeof(amidate), ptx);
+	{
+	    AMIDATE amidate;
+
+	    fread(&amidate, 1, sizeof(amidate), ptx);
+
+	    if (atoi(amidate.Day) == 10 && atoi(amidate.Month) == 10) {
+		Offset = 0x30;
+		AMIVer = 10;
+	    } else
+		Offset = 0x10;
+	}
 	break;
     };
-    printf("\nReleased\t: %8d", DateParse(amidate.Month, amidate.Day, amidate.Year));
+
+    fseek(ptx, -11L, SEEK_END);
+    fread(Date, 1, 8, ptx);
+    Date[8] = 0;
+    printf("\nReleased\t: %s", Date);
 
     switch (AMIVer) {
     case 95:
