@@ -417,7 +417,7 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fn
 
     sLen = strlen(fname);
     for (i = sLen; i > 0; i--)
-	if(*(fname + i) == '/' || *(fname + i ) == '\\') {
+	if (*(fname + i) == '/' || *(fname + i ) == '\\') {
 	    i++;
 	    break;
 	}
@@ -432,7 +432,7 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fn
 
     if ((Action & 0x80) && (Action & 0x10)) {
 	doDir = 1;
-	if(!mkdir(MyDirName, 0755))
+	if (!mkdir(MyDirName, 0755))
 	    printf("\nOperation mkdir() is permitted");
 	else
 	    printf("\nOperation mkdir() isn't permitted. Directory already exist?");
@@ -447,7 +447,7 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fn
 	   );
 
     while((part.PrePartLo != 0xFFFF || part.PrePartHi != 0xFFFF) && PartTotal < 0x80) {
-	fseek(ptx, Offset-ConstOff, SEEK_SET);
+	fseek(ptx, Offset - ConstOff, SEEK_SET);
 	fread(&part, 1, sizeof(part), ptx);
 	PartTotal++;
 
@@ -460,7 +460,7 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fn
 		   (part.IsComprs!=0x80) ? (part.ExpSize) : (part.CSize),
 		   (part.IsComprs!=0x80) ? (part.ExpSize) : (part.CSize),
 		   (part.IsComprs!=0x80) ? ("+") : (" "),
-		   Offset-ConstOff);
+		   Offset - ConstOff);
 	    break;
 	case Xtract: /* Xtracting Part */
 	    if (part.PartID == 0x20) {
@@ -688,15 +688,11 @@ int
 main(int argc, char *argv[])
 {
     FILE *ptx;
-    uint32_t fLen, i, RealRead = 0;
-    char Temp[] = "AMIBIOSC", *BufBlk;
-    char Buf[12];
+    uint32_t fLen;
     ABCTag abc;
     char Date[9];
-    uint32_t ConstOff, Offset, BODYOff = 0;
-
+    uint32_t Offset;
     uint8_t AMIVer = 0;
-
     uint8_t PartTotal = 0;
     uint8_t Action = 0;
     uint8_t HelpID = 0;
@@ -730,87 +726,108 @@ main(int argc, char *argv[])
     printf("FileLength\t: %X (%u bytes)\n", fLen, fLen);
     printf("FileName\t: %s\n", argv[1]);
 
-    /*------- Memory Alloc --------*/
-    BufBlk = (char *) calloc(BLOCK, 1);
-    if(!BufBlk)
-	exit(1);
-    i = 0;
+    /*
+     * Look for AMI bios header.
+     */
+    {
+	char Temp[] = "AMIBIOSC";
+	char *BufBlk = (char *) calloc(BLOCK, 1);
+	int i = 0;
 
-    while (!feof(ptx)) {
-	fseek(ptx, i, SEEK_SET);
-	RealRead = fread(BufBlk, 1, BLOCK, ptx);
-	if ((i = FoundAt(ptx, BufBlk, Temp, RealRead) ) != 0) {
-	    fseek(ptx, i + 8, SEEK_SET);
-	    fread(&abc, 1, sizeof(abc), ptx);
-	    AMIVer = 95;
-	    break;
+	if (!BufBlk)
+	    exit(1);
+
+	while (!feof(ptx)) {
+	    uint32_t RealRead;
+
+	    fseek(ptx, i, SEEK_SET);
+	    RealRead = fread(BufBlk, 1, BLOCK, ptx);
+	    if ((i = FoundAt(ptx, BufBlk, Temp, RealRead)) != 0) {
+		fseek(ptx, i + 8, SEEK_SET);
+		fread(&abc, 1, sizeof(abc), ptx);
+		AMIVer = 95;
+		break;
+	    }
+	    i = ftell(ptx) - 0x100;
 	}
-	i = ftell(ptx) - 0x100;
+
+	free(BufBlk);
+
+	if (AMIVer != 95) {
+	    char Buf[12];
+
+	    printf("AMI'95 hook not found..Turning to AMI'94\n");
+
+	    fseek(ptx, 0, SEEK_SET);
+	    fread(&Buf, 1, 8, ptx);
+
+	    if (memcmp(Buf, Temp, 8) != 0) {
+		printf("Obviously not even AMIBIOS standard..Exit\n");
+		return 0;
+	    } else {
+		AMIDATE amidate;
+
+		fread(&amidate, 1, sizeof(amidate), ptx);
+		if (atoi(amidate.Day) == 10 && atoi(amidate.Month) == 10)
+		    AMIVer = 10;
+		else
+		    AMIVer = 94;
+	    }
+	}
     }
 
-    if (AMIVer != 95) {
-	printf("AMI'95 hook not found..Turning to AMI'94\n");
-	fseek(ptx, 0, SEEK_SET);
-	fread(&Buf, 1, 8, ptx);
-	if(memcmp(Buf, Temp, 8) != 0) {
-	    printf("Obviously not even AMIBIOS standard..Exit\n");
-	    return 0;
-	} else
-	    AMIVer = 94;
-    };
+    /* Get Date */
+    fseek(ptx, -11L, SEEK_END);
+    fread(Date, 1, 8, ptx);
+    Date[8] = 0;
 
     printf("\n\tAMIBIOS information:");
 
     switch (AMIVer) {
     case 95:
-	printf("\nVersion\t\t: %.4s", abc.Version);
-	printf("\nPacked Data\t: %X (%u bytes)", (uint32_t) abc.CRCLen * 8, (uint32_t) abc.CRCLen * 8);
-	printf("\nStart\t\t: %X", Offset = ((uint32_t) abc.BeginHi << 4) + (uint32_t) abc.BeginLo);
-
-	BODYOff = fLen - ( 0x100000 - ( Offset + 8 + sizeof(abc)) ) - 8 - sizeof(abc);
-	printf("\nPacked Offset\t: %X", BODYOff);
-
-	ConstOff = Offset - BODYOff;
-	printf("\nOffset\t\t: %X", ConstOff);
-
-	break;
-    case 94:
 	{
-	    AMIDATE amidate;
+	    uint32_t ConstOff;
 
-	    fread(&amidate, 1, sizeof(amidate), ptx);
+	    printf("\nAMI95 Version\t\t: %.4s", abc.Version);
+	    printf("\nPacked Data\t: %X (%u bytes)", (uint32_t) abc.CRCLen * 8, (uint32_t) abc.CRCLen * 8);
 
-	    if (atoi(amidate.Day) == 10 && atoi(amidate.Month) == 10) {
-		Offset = 0x30;
-		AMIVer = 10;
-	    } else
-		Offset = 0x10;
+	    Offset = (((uint32_t) abc.BeginHi) << 4) + (uint32_t) abc.BeginLo;
+	    printf("\nStart\t\t: %X", Offset);
+
+	    printf("\nPacked Offset\t: %X", fLen - 0x100000 + Offset);
+
+	    ConstOff = 0x100000 - fLen;
+	    printf("\nOffset\t\t: %X", ConstOff);
+	    printf("\nReleased\t: %s", Date);
+
+	    PartTotal = Xtract95(ptx, HelpID, ConstOff, Offset, argv[1]);
+
+	    printf("\nTotal Sections\t: %i\n", PartTotal);
 	}
 	break;
-    };
-
-    fseek(ptx, -11L, SEEK_END);
-    fread(Date, 1, 8, ptx);
-    Date[8] = 0;
-    printf("\nReleased\t: %s", Date);
-
-    switch (AMIVer) {
-    case 95:
-	PartTotal = Xtract95(ptx, HelpID, ConstOff, Offset, argv[1]);
-	break;
     case 94:
+	printf("\n AMI94.");
+	Offset = 0x10;
+	printf("\nStart\t\t: %X", Offset);
+	printf("\nReleased\t: %s", Date);
+
 	PartTotal = Xtract0725(ptx, Action, Offset);
+
+	printf("\nTotal Sections\t: %i\n", PartTotal);
 	break;
     case 10:
-	PartTotal = Xtract1010(ptx, Action, Offset);
+	printf("\n AMI 10.");
+	Offset = 0x30;
+	printf("\nStart\t\t: %X", Offset);
+	printf("\nReleased\t: %s", Date);
+
+	PartTotal = Xtract1010(ptx, Action, 0x30);
+
+	printf("\nTotal Sections\t: %i\n", PartTotal);
 	break;
     default:
 	break;
     }
-    printf("\nTotal Sections\t: %i", PartTotal);
 
-    free(BufBlk);
-
-    printf("\n");
     return 0;
 }
