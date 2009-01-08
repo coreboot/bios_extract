@@ -37,17 +37,13 @@
 #include <stdlib.h>
 #include <memory.h>
 #include <inttypes.h>
+#include <errno.h>
 
 /* for mkdir */
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include "kernel.h"
-
-#define Xtract  0x10
-#define List    0x01
-#define Delete  0x12
-#define XtractD 0x13
 
 #define BLOCK   0x8000
 
@@ -102,60 +98,63 @@ uint8_t Url[] = "Bug-reports direct to "SftEMail;
 
 #define SftVersion "0.31e"
 
-static uint8_t
-HelpSystem(int argc, char *argv[])
-{
-    uint8_t x;
-    uint8_t ID = 0;
 
-    for (x = 1; x < argc; x++) {
-	if (strcmp(argv[x], "-h") == 0) {
-	    printf("\n"SftName" HelpSystem Starting Now!\n");
-	    printf("\nThis Program Version Number %s",SftVersion);
-	    printf(
-		   "\n"SftName" - Decompressor for AmiBIOSes only.\n"
-		   "\tSupported formats: AMIBIOS'94, AMIBIOS'95 or later\n\n"
-		   ""SftName" performs on 386 or better CPU systems\n"
-		   "under control of LinuxOS\n\n"
-		   "Compression schemes include: LZINT\n\n"
-		   "Modules marked with ""+"" sign are compressed modules\n\n"
-		   "\tBug reports mailto: "SftEMail"\n"
-		   "\t\tCompiled: %s, %s with \n\t\t%s",__DATE__,__TIME__,__VERSION__);
-	    printf("\n");
-	    return( 0x20 );
+#define ACT_NONE    0
+#define ACT_EXTRACT 1
+#define ACT_LIST    2
+static int Action = 0;
+static char *FileName = NULL;
+
+static void
+HelpPrint(char *name)
+{
+    printf("%s Version %s \n\n", SftName, SftVersion);
+    printf("Program to extract AMI Bios images (AMIBIOS '94 and '95).\n");
+    printf("Usage: %s <action> <filename>\n", name);
+    printf("Actions:\n");
+    printf("\"l\"\tList Bios Structure.\n");
+    printf("\"x\"\tExtract Bios Modules.\n");
+    printf("\"h\"\tPrint usage information.\n");
+}
+
+static void
+ArgumentsParse(int argc, char *argv[])
+{
+    int i;
+
+    for (i = 1; i < argc; i++) {
+	if (!strcmp(argv[i], "h")) {
+	    HelpPrint(argv[0]);
+	    exit(0);
+	} else if (!strcmp(argv[i], "x")) {
+	    if (!Action)
+		Action = ACT_EXTRACT;
+	    else {
+		fprintf(stderr, "Error: wrong argument (%s)."
+			" Please provide only one action.\n", argv[i]);
+		HelpPrint(argv[0]);
+		exit(1);
+	    }
+	} else if (!strcmp(argv[i], "l")) {
+	    if (!Action)
+		Action = ACT_LIST;
+	    else {
+		fprintf(stderr, "Error: wrong argument (%s)."
+			" Please provide only one action.\n", argv[i]);
+		HelpPrint(argv[0]);
+		exit(1);
+	    }
+	} else {
+	    if (!FileName)
+		FileName = argv[i];
+	    else {
+		fprintf(stderr, "Error: wrong argument (%s)."
+			" Please provide only one filename.\n", argv[i]);
+		HelpPrint(argv[0]);
+		exit(1);
+	    }
 	}
-	if (strcmp(argv[x], "-x") == 0)
-	    ID = ID ^ 0x10;
-	if (strcmp(argv[x], "-l") == 0)
-	    ID = ID ^ 0x01;
-	if (strcmp(argv[x], "-d") == 0)
-	    ID = ID ^ 0x80;
     }
-
-    return (ID);
-    return(0);
-}
-
-static void
-PrintHeader(char *EOL)
-{
-    printf("\n%c%s%c%s", 0x4, "-="SftName", version "SftVersion"=-", 0x4, EOL);
-}
-
-static void
-PrintUsage()
-{
-    PrintHeader("");
-    printf("%s",CopyRights);
-    printf("\n\nUsage: %s <AmiBIOS.BIN> [Options]",SftName);
-    printf("\n"
-	   "\t\tOptions:"
-	   "\n\t\t\t\"-l\" List Bios Structure"
-	   "\n\t\t\t\"-x\" eXtract Bios Modules"
-	   "\n\t\t\t\"-d\" create Directory"
-	   "\n\t\t\t\"-h\" Help statistics"
-	   );
-    printf("\n\n\t*%s*\n",Url);
 }
 
 #define FALSE 0
@@ -264,17 +263,14 @@ FoundAt(FILE *ptx, char *Buf, char *Pattern, uint32_t BLOCK_LEN)
         Xtract95
 ----------------------------------*/
 static uint8_t
-Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fname)
+Xtract95(FILE *ptx, uint32_t ConstOff, uint32_t Offset, char *fname)
 {
     FILE *pto;
     uint8_t PartTotal = 0;
     PARTTag part;
     char Buf[64];
-    char MyDirName[64] = "--DECO--";
     uint32_t i;
     uint8_t sLen = 0;
-
-    uint8_t doDir   = 0;
     /* For the case of multiple 0x20 modules */
     uint8_t Multiple = 0;
 
@@ -284,24 +280,6 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fn
 	    i++;
 	    break;
 	}
-
-    memcpy(MyDirName, (fname + i), sLen - i);
-    for (i = 0; i < strlen(MyDirName); i++)
-	if (MyDirName[i] == '.' )
-	    MyDirName[i] = '\x0';
-
-    sprintf(MyDirName, "%s.---", MyDirName);
-    printf("\nDirName\t\t: %s", MyDirName);
-
-    if ((Action & 0x80) && (Action & 0x10)) {
-	doDir = 1;
-	if (!mkdir(MyDirName, 0755))
-	    printf("\nOperation mkdir() is permitted");
-	else
-	    printf("\nOperation mkdir() isn't permitted. Directory already exist?");
-    }
-
-    Action = Action & 0x7F;
 
     printf("\n"
 	   "+------------------------------------------------------------------------------+\n"
@@ -314,8 +292,8 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fn
 	fread(&part, 1, sizeof(part), ptx);
 	PartTotal++;
 
-	switch(Action){
-	case List:
+	switch (Action){
+	case ACT_LIST:
 	    printf("\n   %.2X %.2i (%17.17s)    %5.5X (%6.5u) => %5.5X (%6.5u)  %.2s   %5.5Xh",
 		   part.PartID, PartTotal, ModuleNameGet(part.PartID, TRUE),
 		   (part.IsComprs!=0x80) ? (part.ROMSize) : (part.CSize),
@@ -325,18 +303,11 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fn
 		   (part.IsComprs!=0x80) ? ("+") : (" "),
 		   Offset - ConstOff);
 	    break;
-	case Xtract: /* Xtracting Part */
-	    if (part.PartID == 0x20) {
-		if (doDir)
-		    sprintf(Buf, "%s/amipci_%.2X.%.2X", MyDirName, Multiple++, part.PartID);
-		else
-		    sprintf(Buf, "amipci_%.2X.%.2X", Multiple++, part.PartID);
-	    } else {
-		if (doDir)
-		    sprintf(Buf, "%s/amibody.%.2x", MyDirName, part.PartID);
-		else
-		    sprintf(Buf,"amibody.%.2x", part.PartID);
-	    }
+	case ACT_EXTRACT:
+	    if (part.PartID == 0x20)
+		sprintf(Buf, "amipci_%.2X.%.2X", Multiple++, part.PartID);
+	    else
+		sprintf(Buf,"amibody.%.2x", part.PartID);
 
 	    if ((pto = fopen(Buf, "wb")) == NULL) {
 		printf("\nFile %s I/O error..Exit", Buf);
@@ -366,7 +337,7 @@ Xtract95(FILE *ptx, uint8_t Action, uint32_t ConstOff, uint32_t Offset, char *fn
         Xtract0725
 ----------------------------------*/
 static uint8_t
-Xtract0725(FILE *ptx, uint8_t Action, uint32_t Offset)
+Xtract0725(FILE *ptx, uint32_t Offset)
 {
     BIOS94 b94;
     FILE *pto;
@@ -383,11 +354,10 @@ Xtract0725(FILE *ptx, uint8_t Action, uint32_t Offset)
 
 	PartTotal++;
 
-        switch(Action) {
-	case List:
+        switch (Action) {
+	case ACT_LIST:
 	    break;
-
-	case Xtract: /* Xtracting Part */
+	case ACT_EXTRACT: /* Xtracting Part */
 	    sprintf(Buf,"amibody.%.2x", Module++);
 	    pto = fopen(Buf, "wb");
 	    decode(ptx, b94.PackLenLo, pto, b94.RealLenLo);
@@ -408,7 +378,7 @@ Xtract0725(FILE *ptx, uint8_t Action, uint32_t Offset)
         Xtract1010
 ----------------------------------*/
 static uint8_t
-Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
+Xtract1010(FILE *ptx, uint32_t Offset)
 {
     FILE *pto;
     uint16_t ModsInHead = 0;
@@ -442,8 +412,7 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 
 
     switch (Action) {
-
-    case List:
+    case ACT_LIST:
 	printf("\n\nModules According to HeaderInfo: %i\n", ModsInHead);
 	for (i = 1; i < ModsInHead; i++) {
 	    fseek(ptx, Mods94[i].RealCS, SEEK_SET);
@@ -481,9 +450,7 @@ Xtract1010(FILE *ptx, uint8_t Action, uint32_t Offset)
 	}
 
 	break;
-
-    case Xtract: /* Xtracting Part */
-
+    case ACT_EXTRACT:
 	for(i = 0; i < ModsInHead; i++) {
 	    fseek(ptx, Mods94[i].RealCS, SEEK_SET);
 	    fread(&ModHead, 1, sizeof(ModHead), ptx);
@@ -556,37 +523,22 @@ main(int argc, char *argv[])
     uint32_t Offset;
     uint8_t AMIVer = 0;
     uint8_t PartTotal = 0;
-    uint8_t Action = 0;
-    uint8_t HelpID = 0;
 
-    HelpID = HelpSystem(argc, argv);
-    switch (HelpID & 0x7F) {
-    case 0x20:
-	return 0;
-    case 0x10:
-	Action = Xtract;
-	break;
-    case 0x01:
-	Action = List;
-	break;
-    default:
-	PrintUsage();
-	printf("\n");
-	return 0;
+    ArgumentsParse(argc, argv);
+
+    printf("\n%s, version %s\n\n", SftName, SftVersion);
+
+    ptx = fopen(FileName, "rb");
+    if (!ptx) {
+	fprintf(stderr, "Error: Failed to open %s: %s\n", FileName, strerror(errno));
+	return 1;
     }
-
-    if (!(ptx = fopen(argv[1],"rb"))) {
-	printf("\nFile %s opening error...\n", argv[1]);
-	return 0;
-    };
-
-    PrintHeader("\n\n");
 
     fseek(ptx, 0, SEEK_END);
     fLen = ftell(ptx);
     rewind(ptx);
     printf("FileLength\t: %X (%u bytes)\n", fLen, fLen);
-    printf("FileName\t: %s\n", argv[1]);
+    printf("FileName\t: %s\n", FileName);
 
     /*
      * Look for AMI bios header.
@@ -669,7 +621,7 @@ main(int argc, char *argv[])
 	    printf("\nOffset\t\t: %X", ConstOff);
 	    printf("\nReleased\t: %s", Date);
 
-	    PartTotal = Xtract95(ptx, HelpID, ConstOff, Offset, argv[1]);
+	    PartTotal = Xtract95(ptx, ConstOff, Offset, argv[1]);
 
 	    printf("\nTotal Sections\t: %i\n", PartTotal);
 	}
@@ -680,7 +632,7 @@ main(int argc, char *argv[])
 	printf("\nStart\t\t: %X", Offset);
 	printf("\nReleased\t: %s", Date);
 
-	PartTotal = Xtract0725(ptx, Action, Offset);
+	PartTotal = Xtract0725(ptx, Offset);
 
 	printf("\nTotal Sections\t: %i\n", PartTotal);
 	break;
@@ -690,7 +642,7 @@ main(int argc, char *argv[])
 	printf("\nStart\t\t: %X", Offset);
 	printf("\nReleased\t: %s", Date);
 
-	PartTotal = Xtract1010(ptx, Action, 0x30);
+	PartTotal = Xtract1010(ptx, 0x30);
 
 	printf("\nTotal Sections\t: %i\n", PartTotal);
 	break;
