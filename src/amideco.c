@@ -1,7 +1,8 @@
 /*
- *	AMIBIOS	Decompress
+ * Decompression utility for AMI BIOSes.
  *
- *      Copyright (C) 2000, 2002 Anthony Borisow
+ * Copyright 2009      Luc Verhaegen <libv@skynet.be>
+ * Copyright 2000-2006 Anthony Borisow
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,21 +18,6 @@
  * along with this program; see the file COPYING.  If not, write to
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  */
-
-/********************************************
-**
-**	Last update for 0.31 - Sep 29, 2000
-**
-********************************************/
-
-/****************************************/
-/*	0.31 Added Buffered Search	*/
-/****************************************/
-/*	WARNING!	Under DJGPP	*/
-/****************************************/
-
-/*		Version 0.31		*/
-
 
 #include <stdio.h>
 #include <stdlib.h>
