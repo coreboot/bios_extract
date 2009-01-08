@@ -52,6 +52,7 @@
 #define BLOCK   0x8000
 
 typedef struct {
+    char AMIBIOSC[8];
     uint8_t    Version[4];
     uint16_t    CRCLen;
     uint32_t   CRC32;
@@ -77,23 +78,6 @@ typedef struct
 
 typedef struct
 {
-    uint8_t    HeadLen;
-    uint8_t    HeadCrc;
-    uint8_t    Method[5];
-    uint32_t   PackLen;
-    uint32_t   RealLen;
-    uint32_t   TStamp;
-    uint8_t    Attr;
-    uint8_t    Level;
-    uint8_t    FilenameLen;
-    uint8_t    FileName[12];
-    uint16_t    CRC16;
-    uint8_t    DOS;
-    uint16_t    Empty;
-} LZHHead;
-
-typedef struct
-{
     uint16_t    PackLenLo;
     uint16_t    PackLenHi;
     uint16_t    RealLenLo;
@@ -108,13 +92,6 @@ typedef struct
     char rsrv2;
     char Year[2];
 } AMIDATE;
-
-typedef struct
-{
-    uint32_t Offset;
-    uint8_t  ModID;
-    uint8_t  IsPacked;
-} AMIHEAD94;
 
 #define SftName "AmiBIOSDeco"
 #define SftEMail "Anton Borisov, anton.borisov@gmail.com"
@@ -689,7 +666,7 @@ main(int argc, char *argv[])
 {
     FILE *ptx;
     uint32_t fLen;
-    ABCTag abc;
+    int ABCOffset;
     char Date[9];
     uint32_t Offset;
     uint8_t AMIVer = 0;
@@ -741,13 +718,16 @@ main(int argc, char *argv[])
 	    uint32_t RealRead;
 
 	    fseek(ptx, i, SEEK_SET);
+
 	    RealRead = fread(BufBlk, 1, BLOCK, ptx);
-	    if ((i = FoundAt(ptx, BufBlk, Temp, RealRead)) != 0) {
-		fseek(ptx, i + 8, SEEK_SET);
-		fread(&abc, 1, sizeof(abc), ptx);
+
+	    ABCOffset = FoundAt(ptx, BufBlk, Temp, RealRead);
+	    if (ABCOffset != 0) {
+		printf("AMIBIOS 95 header found at offset 0x%08X\n", ABCOffset);
 		AMIVer = 95;
 		break;
 	    }
+
 	    i = ftell(ptx) - 0x100;
 	}
 
@@ -787,6 +767,10 @@ main(int argc, char *argv[])
     case 95:
 	{
 	    uint32_t ConstOff;
+	    ABCTag abc;
+
+	    fseek(ptx, ABCOffset, SEEK_SET);
+	    fread(&abc, 1, sizeof(abc), ptx);
 
 	    printf("\nAMI95 Version\t\t: %.4s", abc.Version);
 	    printf("\nPacked Data\t: %X (%u bytes)", (uint32_t) abc.CRCLen * 8, (uint32_t) abc.CRCLen * 8);
