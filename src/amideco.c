@@ -44,18 +44,15 @@ typedef struct {
 
 typedef struct
 {
-    uint16_t    PrePartLo;      /*      Previous part LO uint16_t   */
-    uint16_t    PrePartHi;      /*      Previous part HI uint16_t   */
-    /*      value 0xFFFFFFFF = last */
-    uint16_t    CSize;          /*      This module header Len  */
-    uint8_t    PartID;         /*      ID for this header      */
-    uint8_t    IsComprs;       /*      Value 0x80 means that
-				    this module not
-				    compressed, 0x00 - is   */
-    uint32_t   RealCS;         /*      Address in RAM where
-				    expand to               */
-    uint32_t   ROMSize;        /*      Compressed Len          */
-    uint32_t   ExpSize;        /*      Expanded Len            */
+    /* When Previous Part Address is 0xFFFFFFFF, then this is the last part. */
+    uint16_t PrePartLo; /* Previous part low word */
+    uint16_t PrePartHi; /* Previous part high word */
+    uint16_t CSize; /* Header length */
+    uint8_t PartID; /* ID for this header */
+    uint8_t IsComprs; /* 0x80 -> compressed */
+    uint32_t RealCS; /* Real Address in RAM where to expand to */
+    uint32_t ROMSize; /* Compressed Length */
+    uint32_t ExpSize; /* Expanded Length */
 } PARTTag;
 
 typedef struct
@@ -249,23 +246,15 @@ FoundAt(FILE *ptx, char *Buf, char *Pattern, uint32_t BLOCK_LEN)
         Xtract95
 ----------------------------------*/
 static uint8_t
-Xtract95(FILE *ptx, uint32_t ConstOff, uint32_t Offset, char *fname)
+Xtract95(FILE *ptx, uint32_t ConstOff, uint32_t Offset)
 {
     FILE *pto;
     uint8_t PartTotal = 0;
     PARTTag part;
     char Buf[64];
     uint32_t i;
-    uint8_t sLen = 0;
     /* For the case of multiple 0x20 modules */
     uint8_t Multiple = 0;
-
-    sLen = strlen(fname);
-    for (i = sLen; i > 0; i--)
-	if (*(fname + i) == '/' || *(fname + i ) == '\\') {
-	    i++;
-	    break;
-	}
 
     printf("\n"
 	   "+------------------------------------------------------------------------------+\n"
@@ -607,7 +596,7 @@ main(int argc, char *argv[])
 	    printf("\nOffset\t\t: %X", ConstOff);
 	    printf("\nReleased\t: %s", Date);
 
-	    PartTotal = Xtract95(ptx, ConstOff, Offset, argv[1]);
+	    PartTotal = Xtract95(ptx, ConstOff, Offset);
 
 	    printf("\nTotal Sections\t: %i\n", PartTotal);
 	}
