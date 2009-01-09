@@ -25,10 +25,6 @@
 #include <inttypes.h>
 #include <errno.h>
 
-/* for mkdir */
-#include <sys/stat.h>
-#include <sys/types.h>
-
 #include "kernel.h"
 
 #define VERSION "0.32"
