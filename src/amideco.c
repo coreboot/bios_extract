@@ -35,11 +35,11 @@
 
 typedef struct {
     char AMIBIOSC[8];
-    uint8_t    Version[4];
-    uint16_t    CRCLen;
-    uint32_t   CRC32;
-    uint16_t    BeginLo;
-    uint16_t    BeginHi;
+    char Version[4];
+    uint16_t CRCLen;
+    uint32_t CRC32;
+    uint16_t BeginLo;
+    uint16_t BeginHi;
 } ABCTag;
 
 typedef struct
@@ -63,15 +63,6 @@ typedef struct
     uint16_t    RealLenHi;
 } BIOS94;
 
-typedef struct
-{
-    char Month[2];
-    char rsrv1;
-    char Day[2];
-    char rsrv2;
-    char Year[2];
-} AMIDATE;
-
 #define VERSION "0.32"
 
 #define ACT_NONE    0
@@ -79,6 +70,8 @@ typedef struct
 #define ACT_LIST    2
 static int Action = 0;
 static char *FileName = NULL;
+static int FileLength = 0;
+static uint32_t BIOSOffset = 0;
 
 static void
 HelpPrint(char *name)
@@ -234,11 +227,11 @@ FoundAt(FILE *ptx, char *Buf, char *Pattern, uint32_t BLOCK_LEN)
     return 0;
 }
 
-/*---------------------------------
-        Xtract95
-----------------------------------*/
-static uint8_t
-Xtract95(FILE *ptx, uint32_t ConstOff, uint32_t Offset)
+/*
+ *
+ */
+static void
+Xtract95(FILE *ptx, uint32_t ABCOffset)
 {
     FILE *pto;
     uint8_t PartTotal = 0;
@@ -247,28 +240,43 @@ Xtract95(FILE *ptx, uint32_t ConstOff, uint32_t Offset)
     uint32_t i;
     /* For the case of multiple 0x20 modules */
     uint8_t Multiple = 0;
+    int Compressed;
+    uint32_t Offset;
+    ABCTag abc;
 
-    printf("\n"
-	   "+------------------------------------------------------------------------------+\n"
-	   "| Class.Instance (Name)        Packed --->  Expanded      Compression   Offset |\n"
-	   "+------------------------------------------------------------------------------+\n"
-	   );
+    fseek(ptx, ABCOffset, SEEK_SET);
+    fread(&abc, 1, sizeof(abc), ptx);
+
+    printf("AMI95 Version\t: %.4s\n", abc.Version);
+    printf("Packed Data\t: %X (%u bytes)\n", (uint32_t) abc.CRCLen * 8, (uint32_t) abc.CRCLen * 8);
+
+    Offset = (abc.BeginHi << 4) + abc.BeginLo;
+    printf("Modules offset\t: 0x%05X\n", Offset);
+
+    printf("\nListing Modules:\n");
 
     while((part.PrePartLo != 0xFFFF || part.PrePartHi != 0xFFFF) && PartTotal < 0x80) {
-	fseek(ptx, Offset - ConstOff, SEEK_SET);
+	fseek(ptx, Offset - BIOSOffset, SEEK_SET);
 	fread(&part, 1, sizeof(part), ptx);
+
+	if (part.IsComprs == 0x80)
+	    Compressed = FALSE;
+	else
+	    Compressed = TRUE;
+
 	PartTotal++;
 
 	switch (Action){
 	case ACT_LIST:
-	    printf("\n   %.2X %.2i (%17.17s)    %5.5X (%6.5u) => %5.5X (%6.5u)  %.2s   %5.5Xh",
-		   part.PartID, PartTotal, ModuleNameGet(part.PartID, TRUE),
-		   (part.IsComprs!=0x80) ? (part.ROMSize) : (part.CSize),
-		   (part.IsComprs!=0x80) ? (part.ROMSize) : (part.CSize),
-		   (part.IsComprs!=0x80) ? (part.ExpSize) : (part.CSize),
-		   (part.IsComprs!=0x80) ? (part.ExpSize) : (part.CSize),
-		   (part.IsComprs!=0x80) ? ("+") : (" "),
-		   Offset - ConstOff);
+	    if (Compressed)
+		printf("  %02i: %02X (%17.17s) 0x%05X (0x%05X -> 0x%05X)\n",
+		       PartTotal, part.PartID, ModuleNameGet(part.PartID, TRUE),
+		       Offset - BIOSOffset + 20, part.ROMSize, part.ExpSize);
+	    else
+		printf("  %02i: %02X (%17.17s) 0x%05X (0x%05X)\n",
+		       PartTotal, part.PartID, ModuleNameGet(part.PartID, TRUE),
+		       Offset - BIOSOffset + 20, part.CSize);
+
 	    break;
 	case ACT_EXTRACT:
 	    if (part.PartID == 0x20)
@@ -276,8 +284,9 @@ Xtract95(FILE *ptx, uint32_t ConstOff, uint32_t Offset)
 	    else
 		sprintf(Buf,"amibody.%.2x", part.PartID);
 
-	    if ((pto = fopen(Buf, "wb")) == NULL) {
-		printf("\nFile %s I/O error..Exit", Buf);
+	    pto = fopen(Buf, "wb");
+	    if (!pto) {
+		fprintf(stderr, "File %s I/O error... Exit\n", Buf);
 		exit(1);
 	    }
 
@@ -288,7 +297,7 @@ Xtract95(FILE *ptx, uint32_t ConstOff, uint32_t Offset)
 		for (i = 0; i < part.CSize; i++) {
 		    fread(&Buf[0], 1, 1, ptx);
 		    fwrite(&Buf[0], 1, 1, pto);
-		};
+		}
 	    }
 	    fclose(pto);
 	    break;
@@ -296,14 +305,12 @@ Xtract95(FILE *ptx, uint32_t ConstOff, uint32_t Offset)
 
 	Offset = ((uint32_t)part.PrePartHi << 4) + (uint32_t)part.PrePartLo;
     }
-
-    return (PartTotal);
 }
 
-/*---------------------------------
-        Xtract0725
-----------------------------------*/
-static uint8_t
+/*
+ *
+ */
+static void
 Xtract0725(FILE *ptx, uint32_t Offset)
 {
     BIOS94 b94;
@@ -311,6 +318,9 @@ Xtract0725(FILE *ptx, uint32_t Offset)
     char Buf[12];
     uint8_t PartTotal = 0;
     uint8_t Module = 0;
+
+    printf("\n AMI94.");
+    printf("\nStart\t\t: %X", Offset);
 
     while((b94.PackLenLo != 0x0000 || b94.RealLenLo != 0x0000) && PartTotal < 0x80) {
 	fseek(ptx, Offset, SEEK_SET);
@@ -338,13 +348,13 @@ Xtract0725(FILE *ptx, uint32_t Offset)
     printf("\n\nThis Scheme Usually Contains: \n\t%s\n\t%s\n\t%s",
 	   ModuleNames[0].Name, ModuleNames[1].Name, ModuleNames[2].Name);
 
-    return (PartTotal);
+    printf("\nTotal Sections\t: %i\n", PartTotal);
 }
 
-/*---------------------------------
-        Xtract1010
-----------------------------------*/
-static uint8_t
+/*
+ *
+ */
+static void
 Xtract1010(FILE *ptx, uint32_t Offset)
 {
     FILE *pto;
@@ -356,6 +366,9 @@ Xtract1010(FILE *ptx, uint32_t Offset)
     uint32_t i, ii;
     char Buf[12];
     uint8_t Module = 0;
+
+    printf("\n AMI 10.");
+    printf("\nStart\t\t: %X", Offset);
 
     fseek(ptx, 0x10, SEEK_SET);
     fread(&ModsInHead, 1, sizeof(uint16_t), ptx);
@@ -477,19 +490,14 @@ Xtract1010(FILE *ptx, uint32_t Offset)
     free(Mods94);
     printf("\n\nThis Scheme Usually Doesn't Contain Modules Identification");
 
-    return (GlobalMods);
+    printf("\nTotal Sections\t: %i\n", GlobalMods);
 }
 
 int
 main(int argc, char *argv[])
 {
     FILE *ptx;
-    uint32_t fLen;
-    int ABCOffset;
     char Date[9];
-    uint32_t Offset;
-    uint8_t AMIVer = 0;
-    uint8_t PartTotal = 0;
 
     ArgumentsParse(argc, argv);
 
@@ -499,17 +507,24 @@ main(int argc, char *argv[])
 	return 1;
     }
 
+    /* get filesize, awkwardly */
     fseek(ptx, 0, SEEK_END);
-    fLen = ftell(ptx);
+    FileLength = ftell(ptx);
+    BIOSOffset = 0x100000 - FileLength;
     rewind(ptx);
-    printf("FileLength\t: %X (%u bytes)\n", fLen, fLen);
-    printf("FileName\t: %s\n", FileName);
+
+    /* Get Date */
+    fseek(ptx, -11L, SEEK_END);
+    fread(Date, 1, 8, ptx);
+    Date[8] = 0;
+
+    printf("File \"%s\" (%s) at 0x%08X (%ukB)\n",
+	   FileName, Date, 0xFFF00000 + BIOSOffset, FileLength >> 10);
 
     /*
      * Look for AMI bios header.
      */
     {
-	char Temp[] = "AMIBIOSC";
 	char *BufBlk = (char *) calloc(BLOCK, 1);
 	int i = 0;
 
@@ -518,16 +533,17 @@ main(int argc, char *argv[])
 
 	while (!feof(ptx)) {
 	    uint32_t RealRead;
+	    uint32_t Offset;
 
 	    fseek(ptx, i, SEEK_SET);
 
 	    RealRead = fread(BufBlk, 1, BLOCK, ptx);
 
-	    ABCOffset = FoundAt(ptx, BufBlk, Temp, RealRead);
-	    if (ABCOffset != 0) {
-		printf("AMIBIOS 95 header found at offset 0x%05X\n", ABCOffset);
-		AMIVer = 95;
-		break;
+	    Offset = FoundAt(ptx, BufBlk, "AMIBIOSC", RealRead);
+	    if (Offset != 0) {
+		printf("AMIBIOS 95 header at 0x%05X\n", Offset);
+		Xtract95(ptx, Offset);
+		return 0;
 	    }
 
 	    i = ftell(ptx) - 0x100;
@@ -535,7 +551,7 @@ main(int argc, char *argv[])
 
 	free(BufBlk);
 
-	if (AMIVer != 95) {
+	{
 	    char Buf[12];
 
 	    printf("AMI'95 hook not found..Turning to AMI'94\n");
@@ -543,76 +559,26 @@ main(int argc, char *argv[])
 	    fseek(ptx, 0, SEEK_SET);
 	    fread(&Buf, 1, 8, ptx);
 
-	    if (memcmp(Buf, Temp, 8) != 0) {
+	    if (memcmp(Buf, "AMIBIOSC", 8) != 0) {
 		printf("Obviously not even AMIBIOS standard..Exit\n");
 		return 0;
 	    } else {
-		AMIDATE amidate;
+		struct {
+		    char Month[2];
+		    char rsrv1;
+		    char Day[2];
+		    char rsrv2;
+		    char Year[2];
+		} amidate;
 
 		fread(&amidate, 1, sizeof(amidate), ptx);
 		if (atoi(amidate.Day) == 10 && atoi(amidate.Month) == 10)
-		    AMIVer = 10;
+		    Xtract1010(ptx, 0x30);
 		else
-		    AMIVer = 94;
+		    Xtract0725(ptx, 0x10);
+		return 0;
 	    }
 	}
-    }
-
-    /* Get Date */
-    fseek(ptx, -11L, SEEK_END);
-    fread(Date, 1, 8, ptx);
-    Date[8] = 0;
-
-    printf("\n\tAMIBIOS information:");
-
-    switch (AMIVer) {
-    case 95:
-	{
-	    uint32_t ConstOff;
-	    ABCTag abc;
-
-	    fseek(ptx, ABCOffset, SEEK_SET);
-	    fread(&abc, 1, sizeof(abc), ptx);
-
-	    printf("\nAMI95 Version\t\t: %.4s", abc.Version);
-	    printf("\nPacked Data\t: %X (%u bytes)", (uint32_t) abc.CRCLen * 8, (uint32_t) abc.CRCLen * 8);
-
-	    Offset = (((uint32_t) abc.BeginHi) << 4) + (uint32_t) abc.BeginLo;
-	    printf("\nStart\t\t: %X", Offset);
-
-	    printf("\nPacked Offset\t: %X", fLen - 0x100000 + Offset);
-
-	    ConstOff = 0x100000 - fLen;
-	    printf("\nOffset\t\t: %X", ConstOff);
-	    printf("\nReleased\t: %s", Date);
-
-	    PartTotal = Xtract95(ptx, ConstOff, Offset);
-
-	    printf("\nTotal Sections\t: %i\n", PartTotal);
-	}
-	break;
-    case 94:
-	printf("\n AMI94.");
-	Offset = 0x10;
-	printf("\nStart\t\t: %X", Offset);
-	printf("\nReleased\t: %s", Date);
-
-	PartTotal = Xtract0725(ptx, Offset);
-
-	printf("\nTotal Sections\t: %i\n", PartTotal);
-	break;
-    case 10:
-	printf("\n AMI 10.");
-	Offset = 0x30;
-	printf("\nStart\t\t: %X", Offset);
-	printf("\nReleased\t: %s", Date);
-
-	PartTotal = Xtract1010(ptx, 0x30);
-
-	printf("\nTotal Sections\t: %i\n", PartTotal);
-	break;
-    default:
-	break;
     }
 
     return 0;
