@@ -31,38 +31,6 @@
 
 #include "kernel.h"
 
-#define BLOCK   0x8000
-
-typedef struct {
-    char AMIBIOSC[8];
-    char Version[4];
-    uint16_t CRCLen;
-    uint32_t CRC32;
-    uint16_t BeginLo;
-    uint16_t BeginHi;
-} ABCTag;
-
-typedef struct
-{
-    /* When Previous Part Address is 0xFFFFFFFF, then this is the last part. */
-    uint16_t PrePartLo; /* Previous part low word */
-    uint16_t PrePartHi; /* Previous part high word */
-    uint16_t CSize; /* Header length */
-    uint8_t PartID; /* ID for this header */
-    uint8_t IsComprs; /* 0x80 -> compressed */
-    uint32_t RealCS; /* Real Address in RAM where to expand to */
-    uint32_t ROMSize; /* Compressed Length */
-    uint32_t ExpSize; /* Expanded Length */
-} PARTTag;
-
-typedef struct
-{
-    uint16_t    PackLenLo;
-    uint16_t    PackLenHi;
-    uint16_t    RealLenLo;
-    uint16_t    RealLenHi;
-} BIOS94;
-
 #define VERSION "0.32"
 
 #define ACT_NONE    0
@@ -235,14 +203,35 @@ Xtract95(FILE *ptx, uint32_t ABCOffset)
 {
     FILE *pto;
     uint8_t PartTotal = 0;
-    PARTTag part;
     char Buf[64];
     uint32_t i;
     /* For the case of multiple 0x20 modules */
     uint8_t Multiple = 0;
     int Compressed;
     uint32_t Offset;
-    ABCTag abc;
+
+    struct {
+	char AMIBIOSC[8];
+	char Version[4];
+	uint16_t CRCLen;
+	uint32_t CRC32;
+	uint16_t BeginLo;
+	uint16_t BeginHi;
+    } abc;
+
+    struct {
+	/* When Previous Part Address is 0xFFFFFFFF, then this is the last part. */
+	uint16_t PrePartLo; /* Previous part low word */
+	uint16_t PrePartHi; /* Previous part high word */
+	uint16_t CSize; /* Header length */
+	uint8_t PartID; /* ID for this header */
+	uint8_t IsComprs; /* 0x80 -> compressed */
+	uint32_t RealCS; /* Real Address in RAM where to expand to */
+	uint32_t ROMSize; /* Compressed Length */
+	uint32_t ExpSize; /* Expanded Length */
+    } part;
+
+    printf("AMIBIOS 95 header at 0x%05X\n", ABCOffset);
 
     fseek(ptx, ABCOffset, SEEK_SET);
     fread(&abc, 1, sizeof(abc), ptx);
@@ -303,9 +292,17 @@ Xtract95(FILE *ptx, uint32_t ABCOffset)
 	    break;
 	}
 
-	Offset = ((uint32_t)part.PrePartHi << 4) + (uint32_t)part.PrePartLo;
+	Offset = (part.PrePartHi << 4) + part.PrePartLo;
     }
 }
+
+typedef struct
+{
+    uint16_t PackLenLo;
+    uint16_t PackLenHi;
+    uint16_t RealLenLo;
+    uint16_t RealLenHi;
+} BIOS94;
 
 /*
  *
@@ -360,12 +357,19 @@ Xtract1010(FILE *ptx, uint32_t Offset)
     FILE *pto;
     uint16_t ModsInHead = 0;
     uint16_t GlobalMods = 0;
-    PARTTag *Mods94;
     BIOS94 ModHead;
     uint16_t Tmp;
     uint32_t i, ii;
     char Buf[12];
     uint8_t Module = 0;
+
+    struct Mods94 {
+	uint8_t PartID; /* ID for this header */
+	uint8_t IsCompressed; /* 0x80 -> compressed */
+	uint32_t RealCS; /* Real Address in RAM where to expand to */
+    };
+
+    struct Mods94 *Mods94;
 
     printf("\n AMI 10.");
     printf("\nStart\t\t: %X", Offset);
@@ -374,7 +378,7 @@ Xtract1010(FILE *ptx, uint32_t Offset)
     fread(&ModsInHead, 1, sizeof(uint16_t), ptx);
     GlobalMods = ModsInHead - 1;
 
-    Mods94 = (PARTTag*) calloc(ModsInHead, sizeof(PARTTag));
+    Mods94 = (struct Mods94 *) calloc(ModsInHead, sizeof(struct Mods94));
 
     for (i = 0; i < ModsInHead; i++) {
 	fseek(ptx, 0x14 + i*4, SEEK_SET);
@@ -387,7 +391,10 @@ Xtract1010(FILE *ptx, uint32_t Offset)
 
 	fread(&Tmp, 1, sizeof(Tmp), ptx);
 	Mods94[i].PartID = Tmp & 0xFF;
-	Mods94[i].IsComprs = (Tmp & 0x8000) >> 15;
+	if (Tmp & 0x8000)
+	    Mods94[i].IsCompressed = TRUE;
+	else
+	    Mods94[i].IsCompressed = FALSE;
     }
 
 
@@ -397,14 +404,15 @@ Xtract1010(FILE *ptx, uint32_t Offset)
 	for (i = 1; i < ModsInHead; i++) {
 	    fseek(ptx, Mods94[i].RealCS, SEEK_SET);
 	    fread(&ModHead, 1, sizeof(ModHead), ptx);
-	    printf("\n%.2s %.2X (%17.17s) %5.5X (%5.5u) => %5.5X (%5.5u), %5.5Xh",
-		   (Mods94[i].IsComprs == 0) ? ("+") : (" "),
+
+	    if (Mods94[i].IsCompressed)
+		printf("%.2X (%17.17s) %5.5X => %5.5X, %5.5Xh\n",
+		       Mods94[i].PartID, ModuleNameGet(Mods94[i].PartID, FALSE),
+		       ModHead.PackLenLo, ModHead.RealLenLo, Mods94[i].RealCS);
+	    else
+		printf("%.2X (%17.17s) %5.5X @ %5.5Xh\n",
 		   Mods94[i].PartID, ModuleNameGet(Mods94[i].PartID, FALSE),
-		   (Mods94[i].IsComprs == 1) ? (0x10000 - Mods94[i].RealCS) : (ModHead.PackLenLo),
-		   (Mods94[i].IsComprs == 1) ? (0x10000 - Mods94[i].RealCS) : (ModHead.PackLenLo),
-		   (Mods94[i].IsComprs == 1) ? (0x10000 - Mods94[i].RealCS) : (ModHead.RealLenLo),
-		   (Mods94[i].IsComprs == 1) ? (0x10000 - Mods94[i].RealCS) : (ModHead.RealLenLo),
-		   Mods94[i].RealCS);
+		   0x10000 - Mods94[i].RealCS, Mods94[i].RealCS);
 	}
 
 	Offset = 0x10000;
@@ -442,7 +450,7 @@ Xtract1010(FILE *ptx, uint32_t Offset)
 		exit(1);
 	    }
 
-	    if(Mods94[i].IsComprs == 1) {
+	    if (!Mods94[i].IsCompressed) {
 		fseek(ptx, -8L, SEEK_CUR);
 		for(ii = 0; ii < (0x10000 - (uint32_t) Mods94[i].RealCS); ii++) {
 		    fread(&Buf[0], 1, 1, ptx);
@@ -525,6 +533,7 @@ main(int argc, char *argv[])
      * Look for AMI bios header.
      */
     {
+#define BLOCK 0x8000
 	char *BufBlk = (char *) calloc(BLOCK, 1);
 	int i = 0;
 
@@ -541,7 +550,6 @@ main(int argc, char *argv[])
 
 	    Offset = FoundAt(ptx, BufBlk, "AMIBIOSC", RealRead);
 	    if (Offset != 0) {
-		printf("AMIBIOS 95 header at 0x%05X\n", Offset);
 		Xtract95(ptx, Offset);
 		return 0;
 	    }
@@ -554,14 +562,12 @@ main(int argc, char *argv[])
 	{
 	    char Buf[12];
 
-	    printf("AMI'95 hook not found..Turning to AMI'94\n");
-
 	    fseek(ptx, 0, SEEK_SET);
 	    fread(&Buf, 1, 8, ptx);
 
 	    if (memcmp(Buf, "AMIBIOSC", 8) != 0) {
-		printf("Obviously not even AMIBIOS standard..Exit\n");
-		return 0;
+		fprintf(stderr, "Error: Unable to find AMIBIOSC string.\n");
+		return 1;
 	    } else {
 		struct {
 		    char Month[2];
