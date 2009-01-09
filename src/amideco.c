@@ -19,11 +19,16 @@
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#define _GNU_SOURCE /* memmem is useful */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
 #include <inttypes.h>
 #include <errno.h>
+#include <string.h>
+
+#include <sys/mman.h>
 
 #include "kernel.h"
 
@@ -36,6 +41,7 @@ static int Action = 0;
 static char *FileName = NULL;
 static int FileLength = 0;
 static uint32_t BIOSOffset = 0;
+static char *BIOSImage = NULL;
 
 static void
 HelpPrint(char *name)
@@ -171,26 +177,6 @@ ModuleNameGet(uint8_t ID, int V95)
     return "";
 }
 
-/*---------------------------------
-        FindHook
-----------------------------------*/
-
-static uint32_t
-FoundAt(FILE *ptx, char *Buf, char *Pattern, uint32_t BLOCK_LEN)
-{
-    uint32_t i, Ret;
-    uint16_t Len;
-    Len = strlen(Pattern);
-
-    for (i = 0; i < BLOCK_LEN - 0x80; i++) {
-	if(memcmp(Buf + i, Pattern, Len) == 0) {
-	    Ret = ftell(ptx) - (BLOCK_LEN - i);
-	    return(Ret);
-	}
-    }
-    return 0;
-}
-
 /*
  *
  */
@@ -198,107 +184,105 @@ static void
 Xtract95(FILE *ptx, uint32_t ABCOffset)
 {
     FILE *pto;
-    uint8_t PartTotal = 0;
     char Buf[64];
-    uint32_t i;
     /* For the case of multiple 0x20 modules */
     uint8_t Multiple = 0;
     int Compressed;
     uint32_t Offset;
+    int i;
 
-    struct {
-	char AMIBIOSC[8];
-	char Version[4];
-	uint16_t CRCLen;
-	uint32_t CRC32;
-	uint16_t BeginLo;
-	uint16_t BeginHi;
-    } abc;
+    struct abc {
+	const char AMIBIOSC[8];
+	const char Version[4];
+	const uint16_t CRCLen;
+	const uint32_t CRC32;
+	const uint16_t BeginLo;
+	const uint16_t BeginHi;
+    } *abc;
 
-    struct {
+    struct part {
 	/* When Previous Part Address is 0xFFFFFFFF, then this is the last part. */
-	uint16_t PrePartLo; /* Previous part low word */
-	uint16_t PrePartHi; /* Previous part high word */
-	uint16_t CSize; /* Header length */
-	uint8_t PartID; /* ID for this header */
-	uint8_t IsComprs; /* 0x80 -> compressed */
-	uint32_t RealCS; /* Real Address in RAM where to expand to */
-	uint32_t ROMSize; /* Compressed Length */
-	uint32_t ExpSize; /* Expanded Length */
-    } part;
+	const uint16_t PrePartLo; /* Previous part low word */
+	const uint16_t PrePartHi; /* Previous part high word */
+	const uint16_t CSize; /* Header length */
+	const uint8_t PartID; /* ID for this header */
+	const uint8_t IsComprs; /* 0x80 -> compressed */
+	const uint32_t RealCS; /* Real Address in RAM where to expand to */
+	const uint32_t ROMSize; /* Compressed Length */
+	const uint32_t ExpSize; /* Expanded Length */
+    } *part;
 
     printf("AMIBIOS 95 header at 0x%05X\n", ABCOffset);
+    abc = (struct abc *) (BIOSImage + ABCOffset);
 
-    fseek(ptx, ABCOffset, SEEK_SET);
-    fread(&abc, 1, sizeof(abc), ptx);
+    printf("AMI95 Version\t: %.4s\n", abc->Version);
+    printf("Packed Data\t: %X (%u bytes)\n", (uint32_t) abc->CRCLen * 8, (uint32_t) abc->CRCLen * 8);
 
-    printf("AMI95 Version\t: %.4s\n", abc.Version);
-    printf("Packed Data\t: %X (%u bytes)\n", (uint32_t) abc.CRCLen * 8, (uint32_t) abc.CRCLen * 8);
-
-    Offset = (abc.BeginHi << 4) + abc.BeginLo;
+    Offset = (abc->BeginHi << 4) + abc->BeginLo;
     printf("Modules offset\t: 0x%05X\n", Offset);
 
     printf("\nListing Modules:\n");
 
-    while((part.PrePartLo != 0xFFFF || part.PrePartHi != 0xFFFF) && PartTotal < 0x80) {
-	fseek(ptx, Offset - BIOSOffset, SEEK_SET);
-	fread(&part, 1, sizeof(part), ptx);
+    for (i = 0; i < 0x80; i++) {
+	part = (struct part *) (BIOSImage + (Offset - BIOSOffset));
 
-	if (part.IsComprs == 0x80)
+	if (part->IsComprs == 0x80)
 	    Compressed = FALSE;
 	else
 	    Compressed = TRUE;
-
-	PartTotal++;
 
 	switch (Action){
 	case ACT_LIST:
 	    if (Compressed)
 		printf("  %02i: %02X (%17.17s) 0x%05X (0x%05X -> 0x%05X)\n",
-		       PartTotal, part.PartID, ModuleNameGet(part.PartID, TRUE),
-		       Offset - BIOSOffset + 20, part.ROMSize, part.ExpSize);
+		       i, part->PartID, ModuleNameGet(part->PartID, TRUE),
+		       Offset - BIOSOffset + 20, part->ROMSize, part->ExpSize);
 	    else
 		printf("  %02i: %02X (%17.17s) 0x%05X (0x%05X)\n",
-		       PartTotal, part.PartID, ModuleNameGet(part.PartID, TRUE),
-		       Offset - BIOSOffset + 20, part.CSize);
+		       i, part->PartID, ModuleNameGet(part->PartID, TRUE),
+		       Offset - BIOSOffset + 20, part->CSize);
 
 	    break;
 	case ACT_EXTRACT:
-	    if (part.PartID == 0x20)
-		sprintf(Buf, "amipci_%.2X.%.2X", Multiple++, part.PartID);
+	    if (part->PartID == 0x20)
+		sprintf(Buf, "amipci_%.2X.%.2X", Multiple++, part->PartID);
 	    else
-		sprintf(Buf,"amibody.%.2x", part.PartID);
+		sprintf(Buf, "amibody.%.2x", part->PartID);
 
 	    pto = fopen(Buf, "wb");
 	    if (!pto) {
-		fprintf(stderr, "File %s I/O error... Exit\n", Buf);
+		fprintf(stderr, "Error: unable to open %s: %s\n\n",
+			Buf, strerror(errno));
 		exit(1);
 	    }
 
-	    if (part.IsComprs != 0x80)
-                decode(ptx, part.ROMSize, pto, part.ExpSize);
-	    else {
-		fseek(ptx, -8L, SEEK_CUR);
-		for (i = 0; i < part.CSize; i++) {
-		    fread(&Buf[0], 1, 1, ptx);
-		    fwrite(&Buf[0], 1, 1, pto);
-		}
+	    if (part->IsComprs != 0x80) {
+		/* we should move to dumping .lha files */
+		fseek(ptx, (Offset - BIOSOffset) + 0x14, SEEK_SET);
+		printf("Decoding part %d to %s\n", i, Buf);
+                decode(ptx, part->ROMSize, pto, part->ExpSize);
+	    } else {
+		printf("dumping part %d to %s\n", i, Buf);
+		fwrite(BIOSImage + (Offset - BIOSOffset) + 0x0C, part->CSize, 1, pto);
 	    }
+
 	    fclose(pto);
 	    break;
 	}
 
-	Offset = (part.PrePartHi << 4) + part.PrePartLo;
+	if ((part->PrePartHi == 0xFFFF) || (part->PrePartLo == 0xFFFF))
+	    break;
+	Offset = (part->PrePartHi << 4) + part->PrePartLo;
     }
 }
 
-typedef struct
+struct BIOS94
 {
     uint16_t PackLenLo;
     uint16_t PackLenHi;
     uint16_t RealLenLo;
     uint16_t RealLenHi;
-} BIOS94;
+};
 
 /*
  *
@@ -306,42 +290,41 @@ typedef struct
 static void
 Xtract0725(FILE *ptx, uint32_t Offset)
 {
-    BIOS94 b94;
+    struct BIOS94 *b94;
     FILE *pto;
     char Buf[12];
-    uint8_t PartTotal = 0;
+    int i;
     uint8_t Module = 0;
 
     printf("\n AMI94.");
     printf("\nStart\t\t: %X", Offset);
 
-    while((b94.PackLenLo != 0x0000 || b94.RealLenLo != 0x0000) && PartTotal < 0x80) {
-	fseek(ptx, Offset, SEEK_SET);
-	fread(&b94, 1, sizeof(b94), ptx);
+    for (i = 0; i < 0x80; i++) {
+	b94 = (struct BIOS94 *) (BIOSImage + Offset);
 
-	if(b94.PackLenLo==0x0000 && b94.RealLenLo==0x0000)
+	if (!b94->PackLenLo && !b94->RealLenLo)
 	    break;
-
-	PartTotal++;
 
         switch (Action) {
 	case ACT_LIST:
 	    break;
 	case ACT_EXTRACT: /* Xtracting Part */
-	    sprintf(Buf,"amibody.%.2x", Module++);
+	    sprintf(Buf, "amibody.%.2x", Module++);
 	    pto = fopen(Buf, "wb");
-	    decode(ptx, b94.PackLenLo, pto, b94.RealLenLo);
+	    /* check? */
+
+	    fseek(ptx, Offset + 8, SEEK_SET); /* urgh */
+	    decode(ptx, b94->PackLenLo, pto, b94->RealLenLo);
 	    fclose(pto);
 	    break;
 	}
 
-	Offset = Offset + b94.PackLenLo;
-
+	Offset = Offset + b94->PackLenLo;
     }
     printf("\n\nThis Scheme Usually Contains: \n\t%s\n\t%s\n\t%s",
 	   ModuleNames[0].Name, ModuleNames[1].Name, ModuleNames[2].Name);
 
-    printf("\nTotal Sections\t: %i\n", PartTotal);
+    printf("\nTotal Sections\t: %i\n", i);
 }
 
 /*
@@ -353,7 +336,7 @@ Xtract1010(FILE *ptx, uint32_t Offset)
     FILE *pto;
     uint16_t ModsInHead = 0;
     uint16_t GlobalMods = 0;
-    BIOS94 ModHead;
+    struct BIOS94 ModHead;
     uint16_t Tmp;
     uint32_t i, ii;
     char Buf[12];
@@ -500,14 +483,17 @@ Xtract1010(FILE *ptx, uint32_t Offset)
 int
 main(int argc, char *argv[])
 {
+    int fd;
     FILE *ptx;
     char Date[9];
+    char *ABC;
 
     ArgumentsParse(argc, argv);
 
     ptx = fopen(FileName, "rb");
     if (!ptx) {
-	fprintf(stderr, "Error: Failed to open %s: %s\n", FileName, strerror(errno));
+	fprintf(stderr, "Error: Failed to open %s: %s\n",
+		FileName, strerror(errno));
 	return 1;
     }
 
@@ -517,71 +503,42 @@ main(int argc, char *argv[])
     BIOSOffset = 0x100000 - FileLength;
     rewind(ptx);
 
+    fd = fileno(ptx);
+    if (fd < 0) {
+	fprintf(stderr, "Error: Failed to get the fileno for %s: %s\n",
+		FileName, strerror(errno));
+	return 1;
+    }
+
+    BIOSImage = mmap(NULL, FileLength, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (!BIOSImage) {
+	fprintf(stderr, "Error: Failed to mmap %s: %s\n",
+		FileName, strerror(errno));
+	return 1;
+    }
+
     /* Get Date */
-    fseek(ptx, -11L, SEEK_END);
-    fread(Date, 1, 8, ptx);
+    memcpy(Date, BIOSImage + FileLength - 11, 8);
     Date[8] = 0;
 
     printf("File \"%s\" (%s) at 0x%08X (%ukB)\n",
 	   FileName, Date, 0xFFF00000 + BIOSOffset, FileLength >> 10);
 
-    /*
-     * Look for AMI bios header.
-     */
-    {
-#define BLOCK 0x8000
-	char *BufBlk = (char *) calloc(BLOCK, 1);
-	int i = 0;
-
-	if (!BufBlk)
-	    exit(1);
-
-	while (!feof(ptx)) {
-	    uint32_t RealRead;
-	    uint32_t Offset;
-
-	    fseek(ptx, i, SEEK_SET);
-
-	    RealRead = fread(BufBlk, 1, BLOCK, ptx);
-
-	    Offset = FoundAt(ptx, BufBlk, "AMIBIOSC", RealRead);
-	    if (Offset != 0) {
-		Xtract95(ptx, Offset);
-		return 0;
-	    }
-
-	    i = ftell(ptx) - 0x100;
-	}
-
-	free(BufBlk);
-
-	{
-	    char Buf[12];
-
-	    fseek(ptx, 0, SEEK_SET);
-	    fread(&Buf, 1, 8, ptx);
-
-	    if (memcmp(Buf, "AMIBIOSC", 8) != 0) {
-		fprintf(stderr, "Error: Unable to find AMIBIOSC string.\n");
-		return 1;
-	    } else {
-		struct {
-		    char Month[2];
-		    char rsrv1;
-		    char Day[2];
-		    char rsrv2;
-		    char Year[2];
-		} amidate;
-
-		fread(&amidate, 1, sizeof(amidate), ptx);
-		if (atoi(amidate.Day) == 10 && atoi(amidate.Month) == 10)
-		    Xtract1010(ptx, 0x30);
-		else
-		    Xtract0725(ptx, 0x10);
-		return 0;
-	    }
-	}
+    /* Look for AMIBIOSC Header */
+    ABC = memmem(BIOSImage, FileLength, "AMIBIOSC", 8);
+    if (!ABC) {
+	fprintf(stderr, "Error: Unable to find AMIBIOSC string.\n");
+	return 1;
     }
+
+    if (ABC == BIOSImage) {
+	if ((BIOSImage[8] == '1') && (BIOSImage[9] == '0') &&
+	    (BIOSImage[11] == '1') && (BIOSImage[12] == '0'))
+	    Xtract1010(ptx, 0x30);
+	else
+	    Xtract0725(ptx, 0x10);
+    } else
+	Xtract95(ptx, ABC - BIOSImage);
 
     return 0;
 }
