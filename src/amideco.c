@@ -101,64 +101,63 @@ ArgumentsParse(int argc, char *argv[])
 struct ModuleName
 {
     uint8_t Id;
-    int V95;
     char *Name;
 };
 
 static struct ModuleName
 ModuleNames[] = {
-    {0x00, TRUE, "POST"},
-    {0x01, FALSE, "Setup Server"},
-    {0x02, FALSE, "RunTime"},
-    {0x03, FALSE, "DIM"},
-    {0x04, FALSE, "Setup Client"},
-    {0x05, FALSE, "Remote Server"},
-    {0x06, FALSE, "DMI Data"},
-    {0x07, FALSE, "Green PC"},
-    {0x08, FALSE, "Interface"},
-    {0x09, FALSE, "MP"},
-    {0x0A, FALSE, "Notebook"},
-    {0x0B, FALSE, "Int-10"},
-    {0x0C, FALSE, "ROM-ID"},
-    {0x0D, FALSE, "Int-13"},
-    {0x0E, FALSE, "OEM Logo"},
-    {0x0F, FALSE, "ACPI Table"},
-    {0x10, FALSE, "ACPI AML"},
-    {0x11, FALSE, "P6 Microcode"},
-    {0x12, FALSE, "Configuration"},
-    {0x13, FALSE, "DMI Code"},
-    {0x14, FALSE, "System Health"},
-    {0x15, FALSE, "Memory Sizing"},
-    {0x16, TRUE,  "Memory Test"},
-    {0x17, TRUE,  "Debug"},
-    {0x18, TRUE,  "ADM (Display MGR)"},
-    {0x19, TRUE,  "ADM Font"},
-    {0x1A, TRUE,  "Small Logo"},
-    {0x1B, TRUE,  "SLAB"},
-    {0x20, FALSE, "PCI AddOn ROM"},
-    {0x21, FALSE, "Multilanguage"},
-    {0x22, FALSE, "UserDefined"},
-    {0x23, TRUE,  "ASCII Font"},
-    {0x24, TRUE,  "BIG5 Font"},
-    {0x25, TRUE,  "OEM Logo"},
-    {0x2A, TRUE,  "User ROM"},
-    {0x2B, TRUE,  "PXE Code"},
-    {0x2C, TRUE,  "AMI Font"},
-    {0x2E, TRUE,  "User ROM"},
-    {0x2D, TRUE,  "Battery Refresh"},
-    {0x30, FALSE, "Font Database"},
-    {0x31, FALSE, "OEM Logo Data"},
-    {0x32, FALSE, "Graphic Logo Code"},
-    {0x33, FALSE, "Graphic Logo Data"},
-    {0x34, FALSE, "Action Logo Code"},
-    {0x35, FALSE, "Action Logo Data"},
-    {0x36, FALSE, "Virus"},
-    {0x37, FALSE, "Online Menu"},
-    {0x38, TRUE,  "Lang1 as ROM"},
-    {0x39, TRUE,  "Lang2 as ROM"},
-    {0x3A, TRUE,  "Lang3 as ROM"},
-    {0x70, TRUE,  "OSD Bitmaps"},
-    {0, FALSE, NULL}
+    {0x00, "POST"},
+    {0x01, "Setup Server"},
+    {0x02, "RunTime"},
+    {0x03, "DIM"},
+    {0x04, "Setup Client"},
+    {0x05, "Remote Server"},
+    {0x06, "DMI Data"},
+    {0x07, "Green PC"},
+    {0x08, "Interface"},
+    {0x09, "MP"},
+    {0x0A, "Notebook"},
+    {0x0B, "Int-10"},
+    {0x0C, "ROM-ID"},
+    {0x0D, "Int-13"},
+    {0x0E, "OEM Logo"},
+    {0x0F, "ACPI Table"},
+    {0x10, "ACPI AML"},
+    {0x11, "P6 Microcode"},
+    {0x12, "Configuration"},
+    {0x13, "DMI Code"},
+    {0x14, "System Health"},
+    {0x15, "Memory Sizing"},
+    {0x16, "Memory Test"},
+    {0x17, "Debug"},
+    {0x18, "ADM (Display MGR)"},
+    {0x19, "ADM Font"},
+    {0x1A, "Small Logo"},
+    {0x1B, "SLAB"},
+    {0x20, "PCI AddOn ROM"},
+    {0x21, "Multilanguage"},
+    {0x22, "UserDefined"},
+    {0x23, "ASCII Font"},
+    {0x24, "BIG5 Font"},
+    {0x25, "OEM Logo"},
+    {0x2A, "User ROM"},
+    {0x2B, "PXE Code"},
+    {0x2C, "AMI Font"},
+    {0x2E, "User ROM"},
+    {0x2D, "Battery Refresh"},
+    {0x30, "Font Database"},
+    {0x31, "OEM Logo Data"},
+    {0x32, "Graphic Logo Code"},
+    {0x33, "Graphic Logo Data"},
+    {0x34, "Action Logo Code"},
+    {0x35, "Action Logo Data"},
+    {0x36, "Virus"},
+    {0x37, "Online Menu"},
+    {0x38, "Lang1 as ROM"},
+    {0x39, "Lang2 as ROM"},
+    {0x3A, "Lang3 as ROM"},
+    {0x70, "OSD Bitmaps"},
+    {0, NULL}
 };
 
 static char *
@@ -167,12 +166,8 @@ ModuleNameGet(uint8_t ID, int V95)
     int i;
 
     for (i = 0; ModuleNames[i].Name; i++)
-	if (ModuleNames[i].Id == ID) {
-	    if (!V95 && ModuleNames[i].V95)
-		return "";
-	    else
-		return ModuleNames[i].Name;
-	}
+	if (ModuleNames[i].Id == ID)
+	    return ModuleNames[i].Name;
 
     return "";
 }
@@ -276,210 +271,6 @@ Xtract95(FILE *ptx, uint32_t ABCOffset)
     }
 }
 
-struct BIOS94
-{
-    uint16_t PackLenLo;
-    uint16_t PackLenHi;
-    uint16_t RealLenLo;
-    uint16_t RealLenHi;
-};
-
-/*
- *
- */
-static void
-Xtract0725(FILE *ptx, uint32_t Offset)
-{
-    struct BIOS94 *b94;
-    FILE *pto;
-    char Buf[12];
-    int i;
-    uint8_t Module = 0;
-
-    printf("\n AMI94.");
-    printf("\nStart\t\t: %X", Offset);
-
-    for (i = 0; i < 0x80; i++) {
-	b94 = (struct BIOS94 *) (BIOSImage + Offset);
-
-	if (!b94->PackLenLo && !b94->RealLenLo)
-	    break;
-
-        switch (Action) {
-	case ACT_LIST:
-	    break;
-	case ACT_EXTRACT: /* Xtracting Part */
-	    sprintf(Buf, "amibody.%.2x", Module++);
-	    pto = fopen(Buf, "wb");
-	    /* check? */
-
-	    fseek(ptx, Offset + 8, SEEK_SET); /* urgh */
-	    decode(ptx, b94->PackLenLo, pto, b94->RealLenLo);
-	    fclose(pto);
-	    break;
-	}
-
-	Offset = Offset + b94->PackLenLo;
-    }
-    printf("\n\nThis Scheme Usually Contains: \n\t%s\n\t%s\n\t%s",
-	   ModuleNames[0].Name, ModuleNames[1].Name, ModuleNames[2].Name);
-
-    printf("\nTotal Sections\t: %i\n", i);
-}
-
-/*
- *
- */
-static void
-Xtract1010(FILE *ptx, uint32_t Offset)
-{
-    FILE *pto;
-    uint16_t ModsInHead = 0;
-    uint16_t GlobalMods = 0;
-    struct BIOS94 ModHead;
-    uint16_t Tmp;
-    uint32_t i, ii;
-    char Buf[12];
-    uint8_t Module = 0;
-
-    struct Mods94 {
-	uint8_t PartID; /* ID for this header */
-	uint8_t IsCompressed; /* 0x80 -> compressed */
-	uint32_t RealCS; /* Real Address in RAM where to expand to */
-    };
-
-    struct Mods94 *Mods94;
-
-    printf("\n AMI 10.");
-    printf("\nStart\t\t: %X", Offset);
-
-    fseek(ptx, 0x10, SEEK_SET);
-    fread(&ModsInHead, 1, sizeof(uint16_t), ptx);
-    GlobalMods = ModsInHead - 1;
-
-    Mods94 = (struct Mods94 *) calloc(ModsInHead, sizeof(struct Mods94));
-
-    for (i = 0; i < ModsInHead; i++) {
-	fseek(ptx, 0x14 + i*4, SEEK_SET);
-	fread(&Tmp, 1, sizeof(Tmp), ptx);
-
-	if (i == 0)
-	    Mods94[i].RealCS = 0x10000 + Tmp;
-	else
-	    Mods94[i].RealCS = Tmp;
-
-	fread(&Tmp, 1, sizeof(Tmp), ptx);
-	Mods94[i].PartID = Tmp & 0xFF;
-	if (Tmp & 0x8000)
-	    Mods94[i].IsCompressed = TRUE;
-	else
-	    Mods94[i].IsCompressed = FALSE;
-    }
-
-
-    switch (Action) {
-    case ACT_LIST:
-	printf("\n\nModules According to HeaderInfo: %i\n", ModsInHead);
-	for (i = 1; i < ModsInHead; i++) {
-	    fseek(ptx, Mods94[i].RealCS, SEEK_SET);
-	    fread(&ModHead, 1, sizeof(ModHead), ptx);
-
-	    if (Mods94[i].IsCompressed)
-		printf("%.2X (%17.17s) %5.5X => %5.5X, %5.5Xh\n",
-		       Mods94[i].PartID, ModuleNameGet(Mods94[i].PartID, FALSE),
-		       ModHead.PackLenLo, ModHead.RealLenLo, Mods94[i].RealCS);
-	    else
-		printf("%.2X (%17.17s) %5.5X @ %5.5Xh\n",
-		   Mods94[i].PartID, ModuleNameGet(Mods94[i].PartID, FALSE),
-		   0x10000 - Mods94[i].RealCS, Mods94[i].RealCS);
-	}
-
-	Offset = 0x10000;
-	while(Offset <= Mods94[0].RealCS) {
-	    fseek(ptx, Offset, SEEK_SET);
-	    fread(&ModHead, 1, sizeof(ModHead), ptx);
-
-	    if(ModHead.RealLenHi && ModHead.PackLenHi) {
-		Offset += 0x1000;
-		if ((ModHead.RealLenHi == 0xFFFF) && (ModHead.PackLenHi == 0xFFFF) && ((Offset % 0x1000) != 0))
-		    Offset = 0x1000 * ( Offset / 0x1000 );
-	    } else {
-		printf("\nNext Module (%i): %5.5X (%5.5u) => %5.5X (%5.5u),  %5.5Xh",
-		       GlobalMods,
-		       ModHead.PackLenLo,
-		       ModHead.PackLenLo,
-		       ModHead.RealLenLo,
-		       ModHead.RealLenLo,
-		       Offset);
-		GlobalMods++;
-		Offset += ModHead.PackLenLo;
-	    }
-	}
-
-	break;
-    case ACT_EXTRACT:
-	for(i = 0; i < ModsInHead; i++) {
-	    fseek(ptx, Mods94[i].RealCS, SEEK_SET);
-	    fread(&ModHead, 1, sizeof(ModHead), ptx);
-
-	    sprintf(Buf, "amibody.%.2x", Module++);
-	    pto = fopen(Buf, "wb");
-	    if (!pto) {
-		printf("\nFile %s I/O Error..Exit", Buf);
-		exit(1);
-	    }
-
-	    if (!Mods94[i].IsCompressed) {
-		fseek(ptx, -8L, SEEK_CUR);
-		for(ii = 0; ii < (0x10000 - (uint32_t) Mods94[i].RealCS); ii++) {
-		    fread(&Buf[0], 1, 1, ptx);
-		    fwrite(&Buf[0], 1, 1, pto);
-		};
-	    } else
-		decode(ptx, ModHead.PackLenLo, pto, ModHead.RealLenLo);
-	    fclose(pto);
-	}
-
-	/*------- Hidden Parts -----------*/
-
-	Offset = 0x10000;
-	while(Offset < Mods94[0].RealCS) {
-	    fseek(ptx, Offset, SEEK_SET);
-	    fread(&ModHead, 1, sizeof(ModHead), ptx);
-
-	    if (ModHead.RealLenHi && ModHead.PackLenHi) {
-		Offset += 0x1000;
-		if ((ModHead.RealLenHi == 0xFFFF) && (ModHead.PackLenHi == 0xFFFF) && ((Offset % 0x1000) != 0)) {
-		    Offset = 0x1000 * (Offset/0x1000);
-		    continue;
-		}
-		continue;
-	    } else {
-		GlobalMods++;
-		sprintf(Buf, "amibody.%.2x", Module++);
-
-		pto = fopen(Buf,"wb");
-		if(!pto) {
-		    printf("\nFile %s I/O Error..Exit", Buf);
-		    exit(1);
-		}
-
-		decode(ptx, ModHead.PackLenLo, pto, ModHead.RealLenLo);
-		fclose(pto);
-
-		Offset += ModHead.PackLenLo;
-	    }
-	}
-
-	break;
-    }
-
-    free(Mods94);
-    printf("\n\nThis Scheme Usually Doesn't Contain Modules Identification");
-
-    printf("\nTotal Sections\t: %i\n", GlobalMods);
-}
-
 int
 main(int argc, char *argv[])
 {
@@ -534,11 +325,13 @@ main(int argc, char *argv[])
     if (ABC == BIOSImage) {
 	if ((BIOSImage[8] == '1') && (BIOSImage[9] == '0') &&
 	    (BIOSImage[11] == '1') && (BIOSImage[12] == '0'))
-	    Xtract1010(ptx, 0x30);
+	    fprintf(stderr, "Error: This is an AMI '94 (1010) BIOS Image.\n");
 	else
-	    Xtract0725(ptx, 0x10);
-    } else
-	Xtract95(ptx, ABC - BIOSImage);
+	    fprintf(stderr, "Error: This is an AMI '94 BIOS Image.\n");
+	return 1;
+    }
+
+    Xtract95(ptx, ABC - BIOSImage);
 
     return 0;
 }
