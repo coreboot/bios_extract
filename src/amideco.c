@@ -323,10 +323,17 @@ Xtract95(uint32_t ABCOffset)
 		if (Compressed) {
 		    lhl1_header_write(fd, Buf, part->ROMSize, part->ExpSize);
 		    write(fd, BIOSImage + (Offset - BIOSOffset) + 0x14, part->ROMSize);
-		} else
+		    close(fd);
+		    {
+			char command[64];
+			sprintf(command, "lha x %s\n", filename);
+			system(command);
+		    }
+		    remove(filename);
+		} else {
 		    write(fd, BIOSImage + (Offset - BIOSOffset) + 0x0C, part->CSize);
-
-		close(fd);
+		    close(fd);
+		}
 		break;
 	    }
 	}

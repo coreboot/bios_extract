@@ -4,7 +4,7 @@ CC = gcc
 
 all: amideco
 
-amideco:
+amideco: amideco.c
 	$(CC) $(CFLAGS) amideco.c -o amideco
 
 clean: 
