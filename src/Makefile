@@ -6,7 +6,7 @@
 MAKE = make
 CFLAGS = -g -fpack-struct -Wall
 CC = gcc
-OBJS = kernel.o amideco.o
+OBJS = amideco.o
 
 .o: $*.c
 	$(CC) $(CFLAGS) -c $*.c

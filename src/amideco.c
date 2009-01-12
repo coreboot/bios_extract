@@ -30,8 +30,6 @@
 
 #include <sys/mman.h>
 
-#include "kernel.h"
-
 #define VERSION "0.32"
 
 #define ACT_NONE    0
@@ -173,13 +171,71 @@ ModuleNameGet(uint8_t ID, int V95)
 }
 
 /*
+ * LHA level1 header.
+ */
+struct lhl1_header_pt1 {
+    uint8_t header_size;
+    uint8_t header_checksum;
+    /* !!! string "-lh5-" is 6 bytes long, but lha header has only 5 places */
+    char method_id[5];
+    uint32_t compressed_size;
+    uint32_t uncompressed_size;
+    uint32_t timestamp;
+    uint8_t nullx20;
+    uint8_t level;
+    uint8_t filename_length;
+};
+/* then the filename without '\0' */
+struct lhl1_header_pt2 {
+    uint16_t file_crc16;
+    char os_id;
+    uint16_t next_header_size;
+};
+
+static void
+lhl1_header_write(FILE *pto, char *name,
+		  uint32_t compressed_size, uint32_t uncompressed_size)
+{
+    struct lhl1_header_pt1 head_pt1;
+    struct lhl1_header_pt2 head_pt2;
+    int checksum = 0, i;
+
+    head_pt1.header_size = sizeof(struct lhl1_header_pt1) +
+	sizeof(struct lhl1_header_pt2) + strlen(name) - 2;
+    /* checksum is for later. */
+    memcpy(head_pt1.method_id, "-lh5-", 5);
+    head_pt1.compressed_size = compressed_size;
+    head_pt1.uncompressed_size = uncompressed_size;
+    head_pt1.timestamp = 0;
+    head_pt1.nullx20 = 0x20;
+    head_pt1.level = 1;
+    head_pt1.filename_length = strlen(name);
+
+    head_pt2.file_crc16 = 0;
+    head_pt2.os_id = ' ';
+    head_pt2.next_header_size = 0;
+
+    for (i = 2; i < sizeof(struct lhl1_header_pt1); i++)
+	checksum += ((uint8_t *) &head_pt1)[i];
+    for (i = 0; i < strlen(name); i++)
+	checksum += ((uint8_t *) name)[i];
+    for (i = 0; i < sizeof(struct lhl1_header_pt2); i++)
+	checksum += ((uint8_t *) &head_pt2)[i];
+
+    head_pt1.header_checksum = checksum;
+
+    fwrite(&head_pt1, sizeof(struct lhl1_header_pt1), 1, pto);
+    fwrite(name, strlen(name), 1, pto);
+    fwrite(&head_pt2, sizeof(struct lhl1_header_pt2), 1, pto);
+}
+
+/*
  *
  */
 static void
 Xtract95(FILE *ptx, uint32_t ABCOffset)
 {
     FILE *pto;
-    char Buf[64];
     /* For the case of multiple 0x20 modules */
     uint8_t Multiple = 0;
     int Compressed;
@@ -239,30 +295,38 @@ Xtract95(FILE *ptx, uint32_t ABCOffset)
 
 	    break;
 	case ACT_EXTRACT:
-	    if (part->PartID == 0x20)
-		sprintf(Buf, "amipci_%.2X.%.2X", Multiple++, part->PartID);
-	    else
-		sprintf(Buf, "amibody.%.2x", part->PartID);
+	    {
+		char *filename, Buf[64], Buflzh[64];
 
-	    pto = fopen(Buf, "wb");
-	    if (!pto) {
-		fprintf(stderr, "Error: unable to open %s: %s\n\n",
-			Buf, strerror(errno));
-		exit(1);
+		if (part->PartID == 0x20)
+		    sprintf(Buf, "amipci_%.2X.%.2X", Multiple++, part->PartID);
+		else
+		    sprintf(Buf, "amibody.%.2x", part->PartID);
+
+		if (Compressed) {
+		    filename = Buflzh;
+		    sprintf(filename, "%s.lzh", Buf);
+		} else
+		    filename = Buf;
+
+		pto = fopen(filename, "wb");
+		if (!pto) {
+		    fprintf(stderr, "Error: unable to open %s: %s\n\n",
+			    filename, strerror(errno));
+		    exit(1);
+		}
+
+		printf("Dumping part %d to %s\n", i, filename);
+
+		if (Compressed) {
+		    lhl1_header_write(pto, Buf, part->ROMSize, part->ExpSize);
+		    fwrite(BIOSImage + (Offset - BIOSOffset) + 0x14, part->ROMSize, 1, pto);
+		} else
+		    fwrite(BIOSImage + (Offset - BIOSOffset) + 0x0C, part->CSize, 1, pto);
+
+		fclose(pto);
+		break;
 	    }
-
-	    if (part->IsComprs != 0x80) {
-		/* we should move to dumping .lha files */
-		fseek(ptx, (Offset - BIOSOffset) + 0x14, SEEK_SET);
-		printf("Decoding part %d to %s\n", i, Buf);
-                decode(ptx, part->ROMSize, pto, part->ExpSize);
-	    } else {
-		printf("dumping part %d to %s\n", i, Buf);
-		fwrite(BIOSImage + (Offset - BIOSOffset) + 0x0C, part->CSize, 1, pto);
-	    }
-
-	    fclose(pto);
-	    break;
 	}
 
 	if ((part->PrePartHi == 0xFFFF) || (part->PrePartLo == 0xFFFF))
