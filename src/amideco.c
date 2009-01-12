@@ -27,8 +27,11 @@
 #include <inttypes.h>
 #include <errno.h>
 #include <string.h>
-
 #include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #define VERSION "0.32"
 
@@ -193,7 +196,7 @@ struct lhl1_header_pt2 {
 };
 
 static void
-lhl1_header_write(FILE *pto, char *name,
+lhl1_header_write(int fd, char *name,
 		  uint32_t compressed_size, uint32_t uncompressed_size)
 {
     struct lhl1_header_pt1 head_pt1;
@@ -224,20 +227,17 @@ lhl1_header_write(FILE *pto, char *name,
 
     head_pt1.header_checksum = checksum;
 
-    fwrite(&head_pt1, sizeof(struct lhl1_header_pt1), 1, pto);
-    fwrite(name, strlen(name), 1, pto);
-    fwrite(&head_pt2, sizeof(struct lhl1_header_pt2), 1, pto);
+    write(fd, &head_pt1, sizeof(struct lhl1_header_pt1));
+    write(fd, name, strlen(name));
+    write(fd, &head_pt2, sizeof(struct lhl1_header_pt2));
 }
 
 /*
  *
  */
 static void
-Xtract95(FILE *ptx, uint32_t ABCOffset)
+Xtract95(uint32_t ABCOffset)
 {
-    FILE *pto;
-    /* For the case of multiple 0x20 modules */
-    uint8_t Multiple = 0;
     int Compressed;
     uint32_t Offset;
     int i;
@@ -287,16 +287,18 @@ Xtract95(FILE *ptx, uint32_t ABCOffset)
 	    if (Compressed)
 		printf("  %02i: %02X (%17.17s) 0x%05X (0x%05X -> 0x%05X)\n",
 		       i, part->PartID, ModuleNameGet(part->PartID, TRUE),
-		       Offset - BIOSOffset + 20, part->ROMSize, part->ExpSize);
+		       Offset - BIOSOffset + 0x14, part->ROMSize, part->ExpSize);
 	    else
 		printf("  %02i: %02X (%17.17s) 0x%05X (0x%05X)\n",
 		       i, part->PartID, ModuleNameGet(part->PartID, TRUE),
-		       Offset - BIOSOffset + 20, part->CSize);
+		       Offset - BIOSOffset + 0x0C, part->CSize);
 
 	    break;
 	case ACT_EXTRACT:
 	    {
 		char *filename, Buf[64], Buflzh[64];
+		static uint8_t Multiple = 0; /* For the case of multiple 0x20 modules */
+		int fd;
 
 		if (part->PartID == 0x20)
 		    sprintf(Buf, "amipci_%.2X.%.2X", Multiple++, part->PartID);
@@ -309,8 +311,8 @@ Xtract95(FILE *ptx, uint32_t ABCOffset)
 		} else
 		    filename = Buf;
 
-		pto = fopen(filename, "wb");
-		if (!pto) {
+		fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+		if (fd < 0) {
 		    fprintf(stderr, "Error: unable to open %s: %s\n\n",
 			    filename, strerror(errno));
 		    exit(1);
@@ -319,12 +321,12 @@ Xtract95(FILE *ptx, uint32_t ABCOffset)
 		printf("Dumping part %d to %s\n", i, filename);
 
 		if (Compressed) {
-		    lhl1_header_write(pto, Buf, part->ROMSize, part->ExpSize);
-		    fwrite(BIOSImage + (Offset - BIOSOffset) + 0x14, part->ROMSize, 1, pto);
+		    lhl1_header_write(fd, Buf, part->ROMSize, part->ExpSize);
+		    write(fd, BIOSImage + (Offset - BIOSOffset) + 0x14, part->ROMSize);
 		} else
-		    fwrite(BIOSImage + (Offset - BIOSOffset) + 0x0C, part->CSize, 1, pto);
+		    write(fd, BIOSImage + (Offset - BIOSOffset) + 0x0C, part->CSize);
 
-		fclose(pto);
+		close(fd);
 		break;
 	    }
 	}
@@ -339,31 +341,25 @@ int
 main(int argc, char *argv[])
 {
     int fd;
-    FILE *ptx;
     char Date[9];
     char *ABC;
 
     ArgumentsParse(argc, argv);
 
-    ptx = fopen(FileName, "rb");
-    if (!ptx) {
+    fd = open(FileName, O_RDONLY);
+    if (fd < 0) {
 	fprintf(stderr, "Error: Failed to open %s: %s\n",
 		FileName, strerror(errno));
 	return 1;
     }
 
-    /* get filesize, awkwardly */
-    fseek(ptx, 0, SEEK_END);
-    FileLength = ftell(ptx);
-    BIOSOffset = 0x100000 - FileLength;
-    rewind(ptx);
-
-    fd = fileno(ptx);
-    if (fd < 0) {
-	fprintf(stderr, "Error: Failed to get the fileno for %s: %s\n",
-		FileName, strerror(errno));
+    FileLength = lseek(fd, 0, SEEK_END);
+    if (FileLength < 0) {
+	fprintf(stderr, "Error: Failed to lseek \"%s\": %s\n",
+		argv[1], strerror(errno));
 	return 1;
     }
+    BIOSOffset = 0x100000 - FileLength;
 
     BIOSImage = mmap(NULL, FileLength, PROT_READ, MAP_PRIVATE, fd, 0);
     if (!BIOSImage) {
@@ -395,7 +391,7 @@ main(int argc, char *argv[])
 	return 1;
     }
 
-    Xtract95(ptx, ABC - BIOSImage);
+    Xtract95(ABC - BIOSImage);
 
     return 0;
 }
