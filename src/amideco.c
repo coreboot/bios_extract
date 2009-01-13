@@ -33,6 +33,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#define Bool int
+#define FALSE 0
+#define TRUE  1
+
 #define VERSION "0.32"
 
 #define ACT_NONE    0
@@ -106,9 +110,6 @@ ArgumentsParse(int argc, char *argv[])
 	exit(0);
     }
 }
-
-#define FALSE 0
-#define TRUE  1
 
 struct ModuleName
 {
@@ -246,8 +247,8 @@ lhl1_header_write(int fd, char *name,
 /*
  *
  */
-static void
-AMIBIOS95(uint32_t ABCOffset)
+static Bool
+AMIBIOS95(uint32_t AMIBOffset, uint32_t ABCOffset)
 {
     int Compressed;
     uint32_t Offset;
@@ -275,15 +276,46 @@ AMIBIOS95(uint32_t ABCOffset)
 	const uint32_t ExpSize; /* Expanded Length */
     } *part;
 
+    if (!ABCOffset) {
+	if ((BIOSImage[8] == '1') && (BIOSImage[9] == '0') &&
+	    (BIOSImage[11] == '1') && (BIOSImage[12] == '0'))
+	    fprintf(stderr, "Error: This is an AMI '94 (1010) BIOS Image.\n");
+	else
+	    fprintf(stderr, "Error: This is an AMI '94 BIOS Image.\n");
+	return FALSE;
+    }
+
+    /* First, the boot rom */
+    if (Action == ACT_LIST)
+	printf("AMIBOOT ROM at 0x%05X (0x%05X)\n",
+	       AMIBOffset, FileLength - AMIBOffset);
+    else {
+	int fd;
+
+	fd = open("amiboot.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+	if (fd < 0) {
+	    fprintf(stderr, "Error: unable to open %s: %s\n\n",
+		    "amiboot.rom", strerror(errno));
+	    exit(1);
+	}
+
+	printf("Dumping amiboot.rom.\n");
+
+	write(fd, BIOSImage + AMIBOffset, FileLength - AMIBOffset);
+	close(fd);
+    }
+
+    /* now the individual modules */
+    printf("AMIBIOS 95 header at 0x%05X\n", ABCOffset);
+    abc = (struct abc *) (BIOSImage + ABCOffset);
+
     /* Get Date */
     memcpy(Date, BIOSImage + FileLength - 11, 8);
     Date[8] = 0;
 
-    printf("Found AMIBIOS 95 header at 0x%05X\n", ABCOffset);
-    abc = (struct abc *) (BIOSImage + ABCOffset);
-
     printf("AMI95 Version\t: %.4s (%s)\n", abc->Version, Date);
-    printf("Packed Data\t: %X (%u bytes)\n", (uint32_t) abc->CRCLen * 8, (uint32_t) abc->CRCLen * 8);
+    printf("Packed Data\t: %X (%u bytes)\n",
+	   (uint32_t) abc->CRCLen * 8, (uint32_t) abc->CRCLen * 8);
 
     Offset = (abc->BeginHi << 4) + abc->BeginLo;
     printf("Modules offset\t: 0x%05X\n", Offset);
@@ -298,8 +330,7 @@ AMIBIOS95(uint32_t ABCOffset)
 	else
 	    Compressed = TRUE;
 
-	switch (Action){
-	case ACT_LIST:
+	if (Action == ACT_LIST) {
 	    if (Compressed)
 		printf("  %02i: %02X (%17.17s) 0x%05X (0x%05X -> 0x%05X)\n",
 		       i, part->PartID, ModuleNameGet(part->PartID, TRUE),
@@ -308,49 +339,44 @@ AMIBIOS95(uint32_t ABCOffset)
 		printf("  %02i: %02X (%17.17s) 0x%05X (0x%05X)\n",
 		       i, part->PartID, ModuleNameGet(part->PartID, TRUE),
 		       Offset - BIOSOffset + 0x0C, part->CSize);
+	} else {
+	    char *filename, Buf[64], Buflzh[64];
+	    static uint8_t Multiple = 0; /* For the case of multiple 0x20 modules */
+	    int fd;
 
-	    break;
-	case ACT_EXTRACT:
-	    {
-		char *filename, Buf[64], Buflzh[64];
-		static uint8_t Multiple = 0; /* For the case of multiple 0x20 modules */
-		int fd;
+	    if (part->PartID == 0x20)
+		sprintf(Buf, "amipci_%.2X.%.2X", Multiple++, part->PartID);
+	    else
+		sprintf(Buf, "amibody.%.2x", part->PartID);
 
-		if (part->PartID == 0x20)
-		    sprintf(Buf, "amipci_%.2X.%.2X", Multiple++, part->PartID);
-		else
-		    sprintf(Buf, "amibody.%.2x", part->PartID);
+	    if (Compressed) {
+		filename = Buflzh;
+		sprintf(filename, "%s.lzh", Buf);
+	    } else
+		filename = Buf;
 
-		if (Compressed) {
-		    filename = Buflzh;
-		    sprintf(filename, "%s.lzh", Buf);
-		} else
-		    filename = Buf;
+	    fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+	    if (fd < 0) {
+		fprintf(stderr, "Error: unable to open %s: %s\n\n",
+			filename, strerror(errno));
+		exit(1);
+	    }
 
-		fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-		if (fd < 0) {
-		    fprintf(stderr, "Error: unable to open %s: %s\n\n",
-			    filename, strerror(errno));
-		    exit(1);
-		}
+	    printf("Dumping part %d to %s\n", i, filename);
 
-		printf("Dumping part %d to %s\n", i, filename);
+	    if (Compressed) {
+		 char command[64];
 
-		if (Compressed) {
-		    lhl1_header_write(fd, Buf, part->ROMSize, part->ExpSize);
-		    write(fd, BIOSImage + (Offset - BIOSOffset) + 0x14, part->ROMSize);
-		    close(fd);
-		    {
-			char command[64];
-			sprintf(command, "lha x %s\n", filename);
-			if(!system(command))
-			    remove(filename);
-		    }
-		} else {
-		    write(fd, BIOSImage + (Offset - BIOSOffset) + 0x0C, part->CSize);
-		    close(fd);
-		}
-		break;
+		lhl1_header_write(fd, Buf, part->ROMSize, part->ExpSize);
+		write(fd, BIOSImage + (Offset - BIOSOffset) + 0x14, part->ROMSize);
+		close(fd);
+
+		sprintf(command, "lha x %s\n", filename);
+		if(!system(command))
+		    remove(filename);
+	    } else {
+		write(fd, BIOSImage + (Offset - BIOSOffset) + 0x0C, part->CSize);
+		close(fd);
 	    }
 	}
 
@@ -358,13 +384,29 @@ AMIBIOS95(uint32_t ABCOffset)
 	    break;
 	Offset = (part->PrePartHi << 4) + part->PrePartLo;
     }
+
+    return TRUE;
 }
 
+struct {
+    char *String1;
+    char *String2;
+    Bool (*Handler) (uint32_t Offset1, uint32_t Offset2);
+} BIOSIdentification[] = {
+    {"AMIBOOT ROM", "AMIBIOSC", AMIBIOS95},
+    {NULL, NULL, NULL},
+};
+
+/*
+ *
+ */
 int
 main(int argc, char *argv[])
 {
     int fd;
-    char *ABC;
+    uint32_t Offset1, Offset2;
+    int i, len;
+    char *tmp;
 
     ArgumentsParse(argc, argv);
 
@@ -392,23 +434,25 @@ main(int argc, char *argv[])
 
     printf("Using file \"%s\" (%ukB)\n", FileName, FileLength >> 10);
 
-    /* Look for AMIBIOSC Header */
-    ABC = memmem(BIOSImage, FileLength, "AMIBIOSC", 8);
-    if (!ABC) {
-	fprintf(stderr, "Error: Unable to find AMIBIOSC string.\n");
-	return 1;
-    }
+    for (i = 0; BIOSIdentification[i].Handler; i++) {
+	len = strlen(BIOSIdentification[i].String1);
+	tmp = memmem(BIOSImage, FileLength - len, BIOSIdentification[i].String1, len);
+	if (!tmp)
+	    continue;
+	Offset1 = tmp - BIOSImage;
 
-    if (ABC == BIOSImage) {
-	if ((BIOSImage[8] == '1') && (BIOSImage[9] == '0') &&
-	    (BIOSImage[11] == '1') && (BIOSImage[12] == '0'))
-	    fprintf(stderr, "Error: This is an AMI '94 (1010) BIOS Image.\n");
+	len = strlen(BIOSIdentification[i].String2);
+	tmp = memmem(BIOSImage, FileLength - len, BIOSIdentification[i].String2, len);
+	if (!tmp)
+	    continue;
+	Offset2 = tmp - BIOSImage;
+
+	if (BIOSIdentification[i].Handler(Offset1, Offset2))
+	    return 0;
 	else
-	    fprintf(stderr, "Error: This is an AMI '94 BIOS Image.\n");
-	return 1;
+	    return 1;
     }
 
-    AMIBIOS95(ABC - BIOSImage);
-
-    return 0;
+    fprintf(stderr, "Error: Unable to detect BIOS Image type.\n");
+    return 1;
 }
