@@ -94,6 +94,17 @@ ArgumentsParse(int argc, char *argv[])
 	    }
 	}
     }
+
+    if (!FileName) {
+	fprintf(stderr, "Error: Please provide a filename.\n");
+	HelpPrint(argv[0]);
+	exit(1);
+    }
+
+    if (!Action) {
+	HelpPrint(argv[0]);
+	exit(0);
+    }
 }
 
 #define FALSE 0
@@ -327,9 +338,9 @@ Xtract95(uint32_t ABCOffset)
 		    {
 			char command[64];
 			sprintf(command, "lha x %s\n", filename);
-			system(command);
+			if(!system(command))
+			    remove(filename);
 		    }
-		    remove(filename);
 		} else {
 		    write(fd, BIOSImage + (Offset - BIOSOffset) + 0x0C, part->CSize);
 		    close(fd);
