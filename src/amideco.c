@@ -247,10 +247,11 @@ lhl1_header_write(int fd, char *name,
  *
  */
 static void
-Xtract95(uint32_t ABCOffset)
+AMIBIOS95(uint32_t ABCOffset)
 {
     int Compressed;
     uint32_t Offset;
+    char Date[9];
     int i;
 
     struct abc {
@@ -274,10 +275,14 @@ Xtract95(uint32_t ABCOffset)
 	const uint32_t ExpSize; /* Expanded Length */
     } *part;
 
-    printf("AMIBIOS 95 header at 0x%05X\n", ABCOffset);
+    /* Get Date */
+    memcpy(Date, BIOSImage + FileLength - 11, 8);
+    Date[8] = 0;
+
+    printf("Found AMIBIOS 95 header at 0x%05X\n", ABCOffset);
     abc = (struct abc *) (BIOSImage + ABCOffset);
 
-    printf("AMI95 Version\t: %.4s\n", abc->Version);
+    printf("AMI95 Version\t: %.4s (%s)\n", abc->Version, Date);
     printf("Packed Data\t: %X (%u bytes)\n", (uint32_t) abc->CRCLen * 8, (uint32_t) abc->CRCLen * 8);
 
     Offset = (abc->BeginHi << 4) + abc->BeginLo;
@@ -359,7 +364,6 @@ int
 main(int argc, char *argv[])
 {
     int fd;
-    char Date[9];
     char *ABC;
 
     ArgumentsParse(argc, argv);
@@ -386,12 +390,7 @@ main(int argc, char *argv[])
 	return 1;
     }
 
-    /* Get Date */
-    memcpy(Date, BIOSImage + FileLength - 11, 8);
-    Date[8] = 0;
-
-    printf("File \"%s\" (%s) at 0x%08X (%ukB)\n",
-	   FileName, Date, 0xFFF00000 + BIOSOffset, FileLength >> 10);
+    printf("Using file \"%s\" (%ukB)\n", FileName, FileLength >> 10);
 
     /* Look for AMIBIOSC Header */
     ABC = memmem(BIOSImage, FileLength, "AMIBIOSC", 8);
@@ -409,7 +408,7 @@ main(int argc, char *argv[])
 	return 1;
     }
 
-    Xtract95(ABC - BIOSImage);
+    AMIBIOS95(ABC - BIOSImage);
 
     return 0;
 }
