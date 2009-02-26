@@ -290,7 +290,10 @@ AMIBIOS95(uint32_t AMIBOffset, uint32_t ABCOffset)
 	printf("AMIBOOT ROM at 0x%05X (0x%05X)\n",
 	       AMIBOffset, FileLength - AMIBOffset);
     else {
+	uint32_t RealOffset;
 	int fd;
+
+	RealOffset = AMIBOffset & 0xFFFF0000;
 
 	fd = open("amiboot.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
@@ -301,7 +304,7 @@ AMIBIOS95(uint32_t AMIBOffset, uint32_t ABCOffset)
 
 	printf("Dumping amiboot.rom.\n");
 
-	write(fd, BIOSImage + AMIBOffset, FileLength - AMIBOffset);
+	write(fd, BIOSImage + RealOffset, FileLength - RealOffset);
 	close(fd);
     }
 
