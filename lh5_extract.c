@@ -207,8 +207,6 @@ calccrc(unsigned int crc, unsigned char *p, unsigned int n)
  * LHA extraction.
  *
  */
-#define LZHUFF5_DICBIT          13      /* 2^13 =  8KB sliding dictionary */
-
 #define MIN(a,b) ((a) <= (b) ? (a) : (b))
 
 #define LZHUFF5_DICBIT      13      /* 2^13 =  8KB sliding dictionary */
@@ -229,11 +227,6 @@ calccrc(unsigned int crc, unsigned char *p, unsigned int n)
 
 static off_t compsize;
 static FILE *infile;
-
-struct matchdata {
-    int len;
-    unsigned int off;
-};
 
 static unsigned short left[2 * NC - 1], right[2 * NC - 1];
 
