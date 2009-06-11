@@ -38,9 +38,6 @@
 
 #define FILENAME_LENGTH 1024
 
-static int PackedBufferSize = 0;
-static unsigned char *PackedBuffer;
-
 /*
  *
  * LHA header parsing.
@@ -91,7 +88,7 @@ calc_sum(unsigned char *p, int len)
 static unsigned int
 lha_header_level1_parse(unsigned char *Buffer, int BufferSize,
 			unsigned int *original_size, unsigned int *packed_size,
-			char *filename, unsigned int *crc)
+			char *filename, unsigned short *crc)
 {
     unsigned int offset;
     unsigned char header_size, checksum, name_length;
@@ -166,34 +163,34 @@ lha_header_level1_parse(unsigned char *Buffer, int BufferSize,
 }
 
 /*
- *
+ * CRC Calculation.
  */
-#define CRCPOLY 0xA001 /* CRC-16 (x^16+x^15+x^2+1) */
-static unsigned int crctable[0x100];
-
-static void
-make_crctable(void)
+unsigned short
+CRC16Calculate(unsigned char *Buffer, int BufferSize)
 {
-    unsigned int    i, j, r;
+#define CRCPOLY 0xA001 /* CRC-16 (x^16+x^15+x^2+1) */
+    unsigned short CRCTable[0x100];
+    unsigned short crc;
+    int i;
 
-    for (i = 0; i <= 0xFF; i++) {
-        r = i;
-        for (j = 0; j < 8; j++)
+    /* First, initialise our CRCTable */
+    for (i = 0; i < 0x100; i++) {
+        unsigned short r = i;
+	unsigned int j;
+
+        for (j = 0; j < 8; j++) {
             if (r & 1)
                 r = (r >> 1) ^ CRCPOLY;
             else
                 r >>= 1;
-        crctable[i] = r;
+	}
+        CRCTable[i] = r;
     }
-}
 
-static unsigned int
-calccrc(unsigned int crc, unsigned char *p, unsigned int n)
-{
-    while (n-- > 0) {
-	crc = crctable[(crc ^ (*p)) & 0xFF] ^ (crc >> 8);
-	p++;
-    }
+    /* now go over the entire Buffer */
+    crc = 0;
+    for (i = 0; i < BufferSize; i++)
+	crc = CRCTable[(crc ^ Buffer[i]) & 0xFF] ^ (crc >> 8);
 
     return crc;
 }
@@ -524,14 +521,13 @@ decode_p_st1(void)
     return j;
 }
 
-static unsigned int
+static void
 decode(off_t origsize, FILE *outfile)
 {
     unsigned short blocksize = 0;
     unsigned int i, c;
     unsigned int dicsiz = 1L << LZHUFF5_DICBIT;
     unsigned int dicsize_mask = dicsiz - 1;
-    unsigned int crc = 0;
     off_t decode_count = 0;
     unsigned long loc = 0;
     unsigned char dtext[1 << LZHUFF5_DICBIT];
@@ -554,7 +550,6 @@ decode(off_t origsize, FILE *outfile)
         if (c < 256) {
             dtext[loc++] = c;
             if (loc == dicsiz) {
-		crc = calccrc(crc, dtext, dicsiz);
                 fwrite(dtext, 1, dicsiz, outfile);
                 loc = 0;
             }
@@ -572,7 +567,6 @@ decode(off_t origsize, FILE *outfile)
 
                 dtext[loc++] = c;
                 if (loc == dicsiz) {
-                    crc = calccrc(crc, dtext, dicsiz);
 		    fwrite(dtext, 1, dicsiz, outfile);
                     loc = 0;
                 }
@@ -580,12 +574,8 @@ decode(off_t origsize, FILE *outfile)
         }
     }
 
-    if (loc != 0) {
-	crc = calccrc(crc, dtext, loc);
+    if (loc != 0)
 	fwrite(dtext, 1, loc, outfile);
-    }
-
-    return crc;
 }
 
 int
@@ -593,9 +583,11 @@ main(int argc, char *argv[])
 {
     FILE *fp; /* output file */
     char filename[FILENAME_LENGTH];
-    unsigned int crc, header_crc;
+    unsigned short header_crc;
     unsigned int header_size, original_size, packed_size;
     int fd;
+    int PackedBufferSize = 0;
+    unsigned char *PackedBuffer, *CRCBuffer;
 
     if (argc != 2) {
         fprintf(stderr, "Error: archive file not specified\n");
@@ -646,12 +638,49 @@ main(int argc, char *argv[])
 
     BitBufInit(PackedBuffer + header_size, packed_size);
 
-    make_crctable();
+    decode(original_size, fp);
 
-    crc = decode(original_size, fp);
+    /* get rid of our input file */
+    if (munmap(PackedBuffer, PackedBufferSize))
+	fprintf(stderr, "Warning: Failed to munmap \"%s\": %s\n",
+		argv[1], strerror(errno));
 
-    if (crc != header_crc)
-	fprintf(stderr, "Error: CRC error: \"%s\"\n", filename);
+    if (close(fd))
+	fprintf(stderr, "Warning: Failed to close \"%s\": %s\n",
+		argv[1], strerror(errno));
+
+    /* close output file */
+    if (fclose(fp))
+	fprintf(stderr, "Warning: Failed to fclose \"%s\": %s\n",
+		filename, strerror(errno));
+
+    /* Now open our output file to calculate the CRC */
+    fd = open(filename, O_RDONLY);
+    if (fd < 0) {
+        fprintf(stderr, "Error: Failed to open \"%s\": %s\n",
+		filename, strerror(errno));
+	return 1;
+    }
+
+    CRCBuffer = mmap(NULL, original_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (PackedBuffer < 0) {
+	fprintf(stderr, "Error: Failed to mmap %s: %s\n",
+		filename, strerror(errno));
+	return 1;
+    }
+
+    if (CRC16Calculate(CRCBuffer, original_size) != header_crc) {
+	fprintf(stderr, "Warning: invalid CRC on \"%s\"\n", filename);
+	return 1;
+    }
+
+    if (munmap(CRCBuffer, original_size))
+	fprintf(stderr, "Warning: Failed to munmap \"%s\": %s\n",
+		filename, strerror(errno));
+
+    if (close(fd))
+	fprintf(stderr, "Warning: Failed to close \"%s\": %s\n",
+		filename, strerror(errno));
 
     return 0;
 }
