@@ -423,7 +423,7 @@ main(int argc, char *argv[])
     FileLength = lseek(fd, 0, SEEK_END);
     if (FileLength < 0) {
 	fprintf(stderr, "Error: Failed to lseek \"%s\": %s\n",
-		argv[1], strerror(errno));
+		FileName, strerror(errno));
 	return 1;
     }
     BIOSOffset = 0x100000 - FileLength;

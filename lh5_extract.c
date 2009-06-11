@@ -32,21 +32,20 @@
 #include <sys/types.h>
 #include <string.h>
 #include <stdlib.h>
-
-typedef int boolean;
-#define FALSE 0
-#define TRUE  1
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
 
 #define FILENAME_LENGTH 1024
+
+static int PackedBufferSize = 0;
+static unsigned char *PackedBuffer;
 
 /*
  *
  * LHA header parsing.
  *
  */
-
-#define LZHEADER_STORAGE        4096
-
 static int
 calc_sum(unsigned char *p, int len)
 {
@@ -57,9 +56,6 @@ calc_sum(unsigned char *p, int len)
 
     return sum & 0xff;
 }
-
-#define COMMON_HEADER_SIZE      21      /* size of common part */
-#define I_LEVEL1_HEADER_SIZE  27 /* + name_length */
 
 /*
  * level 1 header
@@ -93,77 +89,77 @@ calc_sum(unsigned char *p, int len)
  *
  */
 static unsigned int
-lha_header_level1_parse(FILE *fp, unsigned int *original_size, unsigned int *packed_size,
+lha_header_level1_parse(unsigned char *Buffer, int BufferSize,
+			unsigned int *original_size, unsigned int *packed_size,
 			char *filename, unsigned int *crc)
 {
-    unsigned char data[LZHEADER_STORAGE];
     unsigned int offset;
     unsigned char header_size, checksum, name_length;
-    unsigned short new_size, extend_size;
 
-    if (fread(data, COMMON_HEADER_SIZE, 1, fp) == 0) {
-        fprintf(stderr, "Error: Unable to read lha header: %s\n",
-		strerror(errno));
-        return FALSE;
+    if (BufferSize < 27) {
+	fprintf(stderr, "Error: Packed Buffer is too small to contain an lha "
+		"header.\n");
+        return 0;
     }
 
     /* check attribute */
-    if (data[19] != 0x20) {
+    if (Buffer[19] != 0x20) {
 	fprintf(stderr, "Error: Invalid lha header attribute byte.\n");
-        return FALSE;
+        return 0;
     }
 
     /* check method */
-    if (memcmp(data + 2, "-lh5-", 5) != 0) {
+    if (memcmp(Buffer + 2, "-lh5-", 5) != 0) {
 	fprintf(stderr, "Error: Compression method is not LZHUFF5.\n");
-	return FALSE;
+	return 0;
     }
 
    /* check header level */
-    if (data[20] != 1) {
-	fprintf(stderr, "Error: Header level %d is not supported\n", data[20]);
-	return FALSE;
+    if (Buffer[20] != 1) {
+	fprintf(stderr, "Error: Header level %d is not supported\n", Buffer[20]);
+	return 0;
     }
 
     /* read in the full header */
-    header_size = data[0];
-    if (fread(data + COMMON_HEADER_SIZE,
-              header_size + 2 - COMMON_HEADER_SIZE, 1, fp) == 0) {
-        fprintf(stderr, "Error: Unable to read full lha header: %s\n",
-		strerror(errno));
-        return FALSE;
+    header_size = Buffer[0];
+    if (BufferSize < (header_size + 2)) {
+	fprintf(stderr, "Error: Packed Buffer is too small to contain the"
+		" full header.\n");
+        return 0;
     }
 
     /* verify checksum */
-    checksum = data[1];
-    if (calc_sum(data + 2, header_size) != checksum) {
+    checksum = Buffer[1];
+    if (calc_sum(Buffer + 2, header_size) != checksum) {
         fprintf(stderr, "Error: Invalid lha header checksum.\n");
-        return FALSE;
+        return 0;
     }
 
-    *packed_size = *(unsigned int *) (data + 7);
-    *original_size = *(unsigned int *) (data + 11);
+    *packed_size = *(unsigned int *) (Buffer + 7);
+    *original_size = *(unsigned int *) (Buffer + 11);
 
-    name_length = data[21];
-    memcpy(filename, data + 22, name_length);
+    name_length = Buffer[21];
+    memcpy(filename, Buffer + 22, name_length);
     filename[name_length] = '\0';
 
-    *crc = *(unsigned short *) (data + 22 + name_length);
+    *crc = *(unsigned short *) (Buffer + 22 + name_length);
 
     offset = header_size + 2;
     /* Skip extended headers */
-    extend_size = *(unsigned short *) (data + offset);
-    while (extend_size) {
+    while (1) {
+	unsigned short extend_size = *(unsigned short *) (Buffer + offset - 2);
+
+	if (!extend_size)
+	    break;
+
 	*packed_size -= extend_size;
 	offset += extend_size;
 
-	if (fread(&new_size, 2, 1, fp) != 2) {
-	    fprintf(stderr, "Error: Invalid extended lha header.\n");
-	    return FALSE;
+	if (BufferSize < offset) {
+	    fprintf(stderr, "Error: Buffer to small to contain extended "
+		    "header.\n");
+	    return 0;
 	}
-
-	fseek(fp, extend_size - 2, SEEK_CUR);
-	extend_size = new_size;
     }
 
     return offset;
@@ -204,53 +200,42 @@ calccrc(unsigned int crc, unsigned char *p, unsigned int n)
 
 /*
  *
- * LHA extraction.
+ * Bit handling code.
  *
  */
-#define MIN(a,b) ((a) <= (b) ? (a) : (b))
-
-#define LZHUFF5_DICBIT      13      /* 2^13 =  8KB sliding dictionary */
-#define MAXMATCH            256 /* formerly F (not more than 255 + 1) */
-#define THRESHOLD           3   /* choose optimal value */
-#define NP          (LZHUFF5_DICBIT + 1)
-#define NT          (16 + 3) /* USHORT + THRESHOLD */
-#define NC          (255 + MAXMATCH + 2 - THRESHOLD)
-
-#define PBIT        4       /* smallest integer such that (1 << PBIT) > * NP */
-#define TBIT        5       /* smallest integer such that (1 << TBIT) > * NT */
-#define CBIT        9       /* smallest integer such that (1 << CBIT) > * NC */
-
-/*      #if NT > NP #define NPT NT #else #define NPT NP #endif  */
-#define NPT         0x80
-
-#define BUFFERSIZE  2048
-
-static off_t compsize;
-static FILE *infile;
-
-static unsigned short left[2 * NC - 1], right[2 * NC - 1];
-
-static unsigned short c_table[4096];   /* decode */
-static unsigned short pt_table[256];   /* decode */
-
-static unsigned char  c_len[NC];
-static unsigned char  pt_len[NPT];
+static unsigned char *CompressedBuffer;
+static int CompressedSize;
+static int CompressedOffset;
 
 static unsigned short bitbuf;
-
 static unsigned char subbitbuf, bitcount;
 
 static void
-fillbuf(unsigned char n)          /* Shift bitbuf n bits left, read n bits */
+BitBufInit(unsigned char *Buffer, int BufferSize)
+{
+    CompressedBuffer = Buffer;
+    CompressedOffset = 0;
+    CompressedSize = BufferSize;
+
+    bitbuf = 0;
+    subbitbuf = 0;
+    bitcount = 0;
+}
+
+static void
+fillbuf(unsigned char n) /* Shift bitbuf n bits left, read n bits */
 {
     while (n > bitcount) {
         n -= bitcount;
         bitbuf = (bitbuf << bitcount) + (subbitbuf >> (8 - bitcount));
-        if (compsize != 0) {
-            compsize--;
-            subbitbuf = getc(infile);
+
+
+        if (CompressedOffset < CompressedSize) {
+            subbitbuf = CompressedBuffer[CompressedOffset];
+	    CompressedOffset++;
         } else
             subbitbuf = 0;
+
         bitcount = 8;
     }
     bitcount -= n;
@@ -278,6 +263,35 @@ peekbits(unsigned char n)
 
     return x;
 }
+
+/*
+ *
+ * LHA extraction.
+ *
+ */
+#define MIN(a,b) ((a) <= (b) ? (a) : (b))
+
+#define LZHUFF5_DICBIT      13      /* 2^13 =  8KB sliding dictionary */
+#define MAXMATCH            256 /* formerly F (not more than 255 + 1) */
+#define THRESHOLD           3   /* choose optimal value */
+#define NP          (LZHUFF5_DICBIT + 1)
+#define NT          (16 + 3) /* USHORT + THRESHOLD */
+#define NC          (255 + MAXMATCH + 2 - THRESHOLD)
+
+#define PBIT        4       /* smallest integer such that (1 << PBIT) > * NP */
+#define TBIT        5       /* smallest integer such that (1 << TBIT) > * NT */
+#define CBIT        9       /* smallest integer such that (1 << CBIT) > * NC */
+
+/*      #if NT > NP #define NPT NT #else #define NPT NP #endif  */
+#define NPT         0x80
+
+static unsigned short left[2 * NC - 1], right[2 * NC - 1];
+
+static unsigned short c_table[4096];   /* decode */
+static unsigned short pt_table[256];   /* decode */
+
+static unsigned char  c_len[NC];
+static unsigned char  pt_len[NPT];
 
 static void
 make_table(short nchar, unsigned char bitlen[], short tablebits, unsigned short table[])
@@ -524,9 +538,6 @@ decode(off_t origsize, FILE *outfile)
 
     memset(dtext, ' ', dicsiz);
 
-    bitbuf = 0;
-    subbitbuf = 0;
-    bitcount = 0;
     fillbuf(2 * 8);
 
     while (decode_count < origsize) {
@@ -584,6 +595,7 @@ main(int argc, char *argv[])
     char filename[FILENAME_LENGTH];
     unsigned int crc, header_crc;
     unsigned int header_size, original_size, packed_size;
+    int fd;
 
     if (argc != 2) {
         fprintf(stderr, "Error: archive file not specified\n");
@@ -591,34 +603,55 @@ main(int argc, char *argv[])
     }
 
     /* open archive file */
-    infile = fopen(argv[1], "rb");
-    if (!infile) {
-        fprintf(stderr, "Error: Failed to open \"%s\": %s",
+    fd = open(argv[1], O_RDONLY);
+    if (fd < 0) {
+        fprintf(stderr, "Error: Failed to open \"%s\": %s\n",
 		argv[1], strerror(errno));
 	return 1;
     }
 
-    /* extract each files */
-    header_size = lha_header_level1_parse(infile, &original_size,
-					  &packed_size, filename,
-					  &header_crc);
-    if (header_size) {
-	fp = fopen(filename, "wb");
-	if (!fp) {
-	    fprintf(stderr, "Error: Failed to open \"%s\": %s\n",
-		    filename, strerror(errno));
-	    return 1;
-	}
-
-	compsize = packed_size;
-
-	make_crctable();
-
-	crc = decode(original_size, fp);
-
-	if (crc != header_crc)
-	    fprintf(stderr, "Error: CRC error: \"%s\"", filename);
+    PackedBufferSize = lseek(fd, 0, SEEK_END);
+    if (PackedBufferSize < 0) {
+	fprintf(stderr, "Error: Failed to lseek \"%s\": %s\n",
+		argv[1], strerror(errno));
+	return 1;
     }
+
+    PackedBuffer = mmap(NULL, PackedBufferSize, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (!PackedBuffer) {
+	fprintf(stderr, "Error: Failed to mmap %s: %s\n",
+		argv[1], strerror(errno));
+	return 1;
+    }
+
+    header_size = lha_header_level1_parse(PackedBuffer, PackedBufferSize,
+					  &original_size, &packed_size,
+					  filename, &header_crc);
+
+    if (!header_size)
+	return 1;
+
+    if ((header_size + packed_size) < PackedBufferSize) {
+	fprintf(stderr, "Error: LHA archive is bigger than \"%s\".\n",
+		argv[1]);
+	return 1;
+    }
+
+    fp = fopen(filename, "wb");
+    if (!fp) {
+	fprintf(stderr, "Error: Failed to open \"%s\": %s\n",
+		filename, strerror(errno));
+	return 1;
+    }
+
+    BitBufInit(PackedBuffer + header_size, packed_size);
+
+    make_crctable();
+
+    crc = decode(original_size, fp);
+
+    if (crc != header_crc)
+	fprintf(stderr, "Error: CRC error: \"%s\"\n", filename);
 
     return 0;
 }
