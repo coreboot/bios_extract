@@ -522,7 +522,8 @@ decode_p_st1(void)
 }
 
 static void
-decode(off_t origsize, FILE *outfile)
+LH5Decode(unsigned char *PackedBuffer, int PackedBufferSize,
+	  FILE *outfile, unsigned int origsize)
 {
     unsigned short blocksize = 0;
     unsigned int i, c;
@@ -533,6 +534,8 @@ decode(off_t origsize, FILE *outfile)
     unsigned char dtext[1 << LZHUFF5_DICBIT];
 
     memset(dtext, ' ', dicsiz);
+
+    BitBufInit(PackedBuffer, PackedBufferSize);
 
     fillbuf(2 * 8);
 
@@ -586,8 +589,8 @@ main(int argc, char *argv[])
     unsigned short header_crc;
     unsigned int header_size, original_size, packed_size;
     int fd;
-    int PackedBufferSize = 0;
-    unsigned char *PackedBuffer, *CRCBuffer;
+    int LHABufferSize = 0;
+    unsigned char *LHABuffer, *CRCBuffer;
 
     if (argc != 2) {
         fprintf(stderr, "Error: archive file not specified\n");
@@ -602,28 +605,28 @@ main(int argc, char *argv[])
 	return 1;
     }
 
-    PackedBufferSize = lseek(fd, 0, SEEK_END);
-    if (PackedBufferSize < 0) {
+    LHABufferSize = lseek(fd, 0, SEEK_END);
+    if (LHABufferSize < 0) {
 	fprintf(stderr, "Error: Failed to lseek \"%s\": %s\n",
 		argv[1], strerror(errno));
 	return 1;
     }
 
-    PackedBuffer = mmap(NULL, PackedBufferSize, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (PackedBuffer < 0) {
+    LHABuffer = mmap(NULL, LHABufferSize, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (LHABuffer < 0) {
 	fprintf(stderr, "Error: Failed to mmap %s: %s\n",
 		argv[1], strerror(errno));
 	return 1;
     }
 
-    header_size = lha_header_level1_parse(PackedBuffer, PackedBufferSize,
+    header_size = lha_header_level1_parse(LHABuffer, LHABufferSize,
 					  &original_size, &packed_size,
 					  filename, &header_crc);
 
     if (!header_size)
 	return 1;
 
-    if ((header_size + packed_size) < PackedBufferSize) {
+    if ((header_size + packed_size) < LHABufferSize) {
 	fprintf(stderr, "Error: LHA archive is bigger than \"%s\".\n",
 		argv[1]);
 	return 1;
@@ -636,12 +639,10 @@ main(int argc, char *argv[])
 	return 1;
     }
 
-    BitBufInit(PackedBuffer + header_size, packed_size);
-
-    decode(original_size, fp);
+    LH5Decode(LHABuffer + header_size, packed_size, fp, original_size);
 
     /* get rid of our input file */
-    if (munmap(PackedBuffer, PackedBufferSize))
+    if (munmap(LHABuffer, LHABufferSize))
 	fprintf(stderr, "Warning: Failed to munmap \"%s\": %s\n",
 		argv[1], strerror(errno));
 
@@ -663,7 +664,7 @@ main(int argc, char *argv[])
     }
 
     CRCBuffer = mmap(NULL, original_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (PackedBuffer < 0) {
+    if (CRCBuffer < 0) {
 	fprintf(stderr, "Error: Failed to mmap %s: %s\n",
 		filename, strerror(errno));
 	return 1;
