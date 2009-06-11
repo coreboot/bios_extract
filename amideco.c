@@ -429,7 +429,7 @@ main(int argc, char *argv[])
     BIOSOffset = 0x100000 - FileLength;
 
     BIOSImage = mmap(NULL, FileLength, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (!BIOSImage) {
+    if (BIOSImage < 0) {
 	fprintf(stderr, "Error: Failed to mmap %s: %s\n",
 		FileName, strerror(errno));
 	return 1;

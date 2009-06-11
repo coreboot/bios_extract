@@ -618,7 +618,7 @@ main(int argc, char *argv[])
     }
 
     PackedBuffer = mmap(NULL, PackedBufferSize, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (!PackedBuffer) {
+    if (PackedBuffer < 0) {
 	fprintf(stderr, "Error: Failed to mmap %s: %s\n",
 		argv[1], strerror(errno));
 	return 1;
