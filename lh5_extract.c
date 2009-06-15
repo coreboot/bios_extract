@@ -35,6 +35,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 
 #define FILENAME_LENGTH 1024
 
@@ -523,23 +524,16 @@ decode_p_st1(void)
 
 static void
 LH5Decode(unsigned char *PackedBuffer, int PackedBufferSize,
-	  FILE *outfile, unsigned int origsize)
+	  unsigned char *OutputBuffer, int OutputBufferSize)
 {
     unsigned short blocksize = 0;
     unsigned int i, c;
-    unsigned int dicsiz = 1L << LZHUFF5_DICBIT;
-    unsigned int dicsize_mask = dicsiz - 1;
-    off_t decode_count = 0;
-    unsigned long loc = 0;
-    unsigned char dtext[1 << LZHUFF5_DICBIT];
-
-    memset(dtext, ' ', dicsiz);
+    int n = 0;
 
     BitBufInit(PackedBuffer, PackedBufferSize);
-
     fillbuf(2 * 8);
 
-    while (decode_count < origsize) {
+    while (n < OutputBufferSize) {
 	if (blocksize == 0) {
 	    blocksize = getbits(16);
 	    read_pt_len(NT, TBIT, 3);
@@ -550,47 +544,29 @@ LH5Decode(unsigned char *PackedBuffer, int PackedBufferSize,
 
         c = decode_c_st1();
 
-        if (c < 256) {
-            dtext[loc++] = c;
-            if (loc == dicsiz) {
-                fwrite(dtext, 1, dicsiz, outfile);
-                loc = 0;
-            }
-            decode_count++;
-        } else {
-	    int length;
-            unsigned int position;
+        if (c < 256)
+            OutputBuffer[n++] = c;
+        else {
+	    int length = c - 256 + THRESHOLD;
+	    int offset = 1 + decode_p_st1();
 
-            length = c - 256 + THRESHOLD;
-            position = (loc - 1 - decode_p_st1()) & dicsize_mask;
-
-            decode_count += length;
-            for (i = 0; i < length; i++) {
-                c = dtext[(position + i) & dicsize_mask];
-
-                dtext[loc++] = c;
-                if (loc == dicsiz) {
-		    fwrite(dtext, 1, dicsiz, outfile);
-                    loc = 0;
-                }
-            }
+	    for (i = 0; i < length; i++) {
+		OutputBuffer[n] = OutputBuffer[n - offset];
+		n++;
+	    }
         }
     }
-
-    if (loc != 0)
-	fwrite(dtext, 1, loc, outfile);
 }
 
 int
 main(int argc, char *argv[])
 {
-    FILE *fp; /* output file */
     char filename[FILENAME_LENGTH];
     unsigned short header_crc;
     unsigned int header_size, original_size, packed_size;
-    int fd;
+    int infd, outfd;
     int LHABufferSize = 0;
-    unsigned char *LHABuffer, *CRCBuffer;
+    unsigned char *LHABuffer, *OutBuffer;
 
     if (argc != 2) {
         fprintf(stderr, "Error: archive file not specified\n");
@@ -598,22 +574,22 @@ main(int argc, char *argv[])
     }
 
     /* open archive file */
-    fd = open(argv[1], O_RDONLY);
-    if (fd < 0) {
+    infd = open(argv[1], O_RDONLY);
+    if (infd == -1) {
         fprintf(stderr, "Error: Failed to open \"%s\": %s\n",
 		argv[1], strerror(errno));
 	return 1;
     }
 
-    LHABufferSize = lseek(fd, 0, SEEK_END);
+    LHABufferSize = lseek(infd, 0, SEEK_END);
     if (LHABufferSize < 0) {
 	fprintf(stderr, "Error: Failed to lseek \"%s\": %s\n",
 		argv[1], strerror(errno));
 	return 1;
     }
 
-    LHABuffer = mmap(NULL, LHABufferSize, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (LHABuffer < 0) {
+    LHABuffer = mmap(NULL, LHABufferSize, PROT_READ, MAP_PRIVATE, infd, 0);
+    if (LHABuffer == ((void *) -1)) {
 	fprintf(stderr, "Error: Failed to mmap %s: %s\n",
 		argv[1], strerror(errno));
 	return 1;
@@ -632,56 +608,56 @@ main(int argc, char *argv[])
 	return 1;
     }
 
-    fp = fopen(filename, "wb");
-    if (!fp) {
+    outfd = open(filename, O_RDWR | O_TRUNC | O_CREAT, S_IRWXU);
+    if (outfd  == -1) {
 	fprintf(stderr, "Error: Failed to open \"%s\": %s\n",
 		filename, strerror(errno));
 	return 1;
     }
 
-    LH5Decode(LHABuffer + header_size, packed_size, fp, original_size);
+    /* grow file */
+    if (lseek(outfd, original_size - 1, SEEK_SET) == -1) {
+	fprintf(stderr, "Error: Failed to grow \"%s\": %s\n",
+		filename, strerror(errno));
+	return 1;
+    }
+
+    if (write(outfd, "", 1) != 1) {
+	fprintf(stderr, "Error: Failed to write to \"%s\": %s\n",
+		filename, strerror(errno));
+	return 1;
+    }
+
+    OutBuffer = mmap(NULL, original_size, PROT_READ | PROT_WRITE, MAP_SHARED, outfd, 0);
+    if (OutBuffer == ((void *) -1)) {
+	fprintf(stderr, "Error: Failed to mmap %s: %s\n",
+		filename, strerror(errno));
+	return 1;
+    }
+
+    LH5Decode(LHABuffer + header_size, packed_size, OutBuffer, original_size);
+
+    if (CRC16Calculate(OutBuffer, original_size) != header_crc) {
+	fprintf(stderr, "Warning: invalid CRC on \"%s\"\n", filename);
+	return 1;
+    }
+
+    if (munmap(OutBuffer, original_size))
+	fprintf(stderr, "Warning: Failed to munmap \"%s\": %s\n",
+		filename, strerror(errno));
+
+    if (close(outfd))
+	fprintf(stderr, "Warning: Failed to close \"%s\": %s\n",
+		filename, strerror(errno));
 
     /* get rid of our input file */
     if (munmap(LHABuffer, LHABufferSize))
 	fprintf(stderr, "Warning: Failed to munmap \"%s\": %s\n",
 		argv[1], strerror(errno));
 
-    if (close(fd))
+    if (close(infd))
 	fprintf(stderr, "Warning: Failed to close \"%s\": %s\n",
 		argv[1], strerror(errno));
-
-    /* close output file */
-    if (fclose(fp))
-	fprintf(stderr, "Warning: Failed to fclose \"%s\": %s\n",
-		filename, strerror(errno));
-
-    /* Now open our output file to calculate the CRC */
-    fd = open(filename, O_RDONLY);
-    if (fd < 0) {
-        fprintf(stderr, "Error: Failed to open \"%s\": %s\n",
-		filename, strerror(errno));
-	return 1;
-    }
-
-    CRCBuffer = mmap(NULL, original_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (CRCBuffer < 0) {
-	fprintf(stderr, "Error: Failed to mmap %s: %s\n",
-		filename, strerror(errno));
-	return 1;
-    }
-
-    if (CRC16Calculate(CRCBuffer, original_size) != header_crc) {
-	fprintf(stderr, "Warning: invalid CRC on \"%s\"\n", filename);
-	return 1;
-    }
-
-    if (munmap(CRCBuffer, original_size))
-	fprintf(stderr, "Warning: Failed to munmap \"%s\": %s\n",
-		filename, strerror(errno));
-
-    if (close(fd))
-	fprintf(stderr, "Warning: Failed to close \"%s\": %s\n",
-		filename, strerror(errno));
 
     return 0;
 }
