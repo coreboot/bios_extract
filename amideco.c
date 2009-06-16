@@ -39,21 +39,13 @@
 #define FALSE 0
 #define TRUE  1
 
-#define VERSION "0.32"
-
 #define ACT_NONE    0
 #define ACT_EXTRACT 1
 #define ACT_LIST    2
-static int Action = 0;
-static char *FileName = NULL;
-static int FileLength = 0;
-static uint32_t BIOSOffset = 0;
-static unsigned char *BIOSImage = NULL;
 
 static void
 HelpPrint(char *name)
 {
-    printf("%s version %s \n\n", name, VERSION);
     printf("Program to extract AMI Bios images (AMIBIOS '94 and '95).\n\n");
     printf("Usage: %s <action> <filename>\n", name);
     printf("Actions:\n");
@@ -62,32 +54,32 @@ HelpPrint(char *name)
     printf("\"h\"\tPrint usage information.\n");
 }
 
-static void
-ArgumentsParse(int argc, char *argv[])
+static char *
+ArgumentsParse(int argc, char *argv[], int *Action)
 {
+    char *FileName = NULL;
     int i;
 
+    *Action = 0;
+
     for (i = 1; i < argc; i++) {
-	if (!strcmp(argv[i], "h")) {
-	    HelpPrint(argv[0]);
-	    exit(0);
-	} else if (!strcmp(argv[i], "x")) {
-	    if (!Action)
-		Action = ACT_EXTRACT;
+	if (!strcmp(argv[i], "h"))
+	    return NULL;
+	else if (!strcmp(argv[i], "x")) {
+	    if (!(*Action))
+		*Action = ACT_EXTRACT;
 	    else {
 		fprintf(stderr, "Error: wrong argument (%s)."
 			" Please provide only one action.\n", argv[i]);
-		HelpPrint(argv[0]);
-		exit(1);
+		return NULL;
 	    }
 	} else if (!strcmp(argv[i], "l")) {
-	    if (!Action)
-		Action = ACT_LIST;
+	    if (!(*Action))
+		*Action = ACT_LIST;
 	    else {
 		fprintf(stderr, "Error: wrong argument (%s)."
 			" Please provide only one action.\n", argv[i]);
-		HelpPrint(argv[0]);
-		exit(1);
+		return NULL;
 	    }
 	} else {
 	    if (!FileName)
@@ -95,32 +87,31 @@ ArgumentsParse(int argc, char *argv[])
 	    else {
 		fprintf(stderr, "Error: wrong argument (%s)."
 			" Please provide only one filename.\n", argv[i]);
-		HelpPrint(argv[0]);
-		exit(1);
+		return NULL;
 	    }
 	}
     }
 
     if (!FileName) {
 	fprintf(stderr, "Error: Please provide a filename.\n");
-	HelpPrint(argv[0]);
-	exit(1);
+	return NULL;
     }
 
-    if (!Action) {
-	HelpPrint(argv[0]);
-	exit(0);
+    if (!*Action) {
+	return NULL;
     }
+
+    return FileName;
 }
 
-struct ModuleName
+struct AMI95ModuleName
 {
     uint8_t Id;
     char *Name;
 };
 
-static struct ModuleName
-ModuleNames[] = {
+static struct AMI95ModuleName
+AMI95ModuleNames[] = {
     {0x00, "POST"},
     {0x01, "Setup Server"},
     {0x02, "RunTime"},
@@ -176,24 +167,66 @@ ModuleNames[] = {
 };
 
 static char *
-ModuleNameGet(uint8_t ID, int V95)
+AMI95ModuleNameGet(uint8_t ID, int V95)
 {
     int i;
 
-    for (i = 0; ModuleNames[i].Name; i++)
-	if (ModuleNames[i].Id == ID)
-	    return ModuleNames[i].Name;
+    for (i = 0; AMI95ModuleNames[i].Name; i++)
+	if (AMI95ModuleNames[i].Id == ID)
+	    return AMI95ModuleNames[i].Name;
 
     return "";
+}
+
+static unsigned char *
+MMapOutputFile(char *filename, int size)
+{
+    unsigned char* Buffer;
+    int fd;
+
+    fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+    if (fd < 0) {
+	fprintf(stderr, "Error: unable to open %s: %s\n\n",
+		filename, strerror(errno));
+	return NULL;
+    }
+
+    /* grow file */
+    if (lseek(fd, size - 1, SEEK_SET) == -1) {
+	fprintf(stderr, "Error: Failed to grow \"%s\": %s\n",
+		filename, strerror(errno));
+	close(fd);
+	return NULL;
+    }
+
+    if (write(fd, "", 1) != 1) {
+	fprintf(stderr, "Error: Failed to write to \"%s\": %s\n",
+		filename, strerror(errno));
+	close(fd);
+	return NULL;
+    }
+
+    Buffer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (Buffer == ((void *) -1)) {
+	fprintf(stderr, "Error: Failed to mmap %s: %s\n",
+		filename, strerror(errno));
+	close(fd);
+	return NULL;
+    }
+
+    close(fd);
+
+    return Buffer;
 }
 
 /*
  *
  */
 static Bool
-AMIBIOS95(uint32_t AMIBOffset, uint32_t ABCOffset)
+AMIBIOS95(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset, int Action,
+	  uint32_t AMIBOffset, uint32_t ABCOffset)
 {
-    int Compressed;
+    Bool Compressed;
     uint32_t Offset;
     char Date[9];
     int i;
@@ -231,7 +264,7 @@ AMIBIOS95(uint32_t AMIBOffset, uint32_t ABCOffset)
     /* First, the boot rom */
     if (Action == ACT_LIST)
 	printf("AMIBOOT ROM at 0x%05X (0x%05X)\n",
-	       AMIBOffset, FileLength - AMIBOffset);
+	       AMIBOffset, BIOSLength - AMIBOffset);
     else {
 	uint32_t RealOffset;
 	int fd;
@@ -242,12 +275,12 @@ AMIBIOS95(uint32_t AMIBOffset, uint32_t ABCOffset)
 	if (fd < 0) {
 	    fprintf(stderr, "Error: unable to open %s: %s\n\n",
 		    "amiboot.rom", strerror(errno));
-	    exit(1);
+	    return FALSE;
 	}
 
 	printf("Dumping amiboot.rom.\n");
 
-	write(fd, BIOSImage + RealOffset, FileLength - RealOffset);
+	write(fd, BIOSImage + RealOffset, BIOSLength - RealOffset);
 	close(fd);
     }
 
@@ -256,7 +289,7 @@ AMIBIOS95(uint32_t AMIBOffset, uint32_t ABCOffset)
     abc = (struct abc *) (BIOSImage + ABCOffset);
 
     /* Get Date */
-    memcpy(Date, BIOSImage + FileLength - 11, 8);
+    memcpy(Date, BIOSImage + BIOSLength - 11, 8);
     Date[8] = 0;
 
     printf("AMI95 Version\t: %.4s (%s)\n", abc->Version, Date);
@@ -279,30 +312,22 @@ AMIBIOS95(uint32_t AMIBOffset, uint32_t ABCOffset)
 	if (Action == ACT_LIST) {
 	    if (Compressed)
 		printf("  %02i: %02X (%17.17s) 0x%05X (0x%05X -> 0x%05X)\n",
-		       i, part->PartID, ModuleNameGet(part->PartID, TRUE),
+		       i, part->PartID, AMI95ModuleNameGet(part->PartID, TRUE),
 		       Offset - BIOSOffset + 0x14, part->ROMSize, part->ExpSize);
 	    else
 		printf("  %02i: %02X (%17.17s) 0x%05X (0x%05X)\n",
-		       i, part->PartID, ModuleNameGet(part->PartID, TRUE),
+		       i, part->PartID, AMI95ModuleNameGet(part->PartID, TRUE),
 		       Offset - BIOSOffset + 0x0C, part->CSize);
 	} else {
 	    char filename[64];
 	    static uint8_t Multiple = 0; /* For the case of multiple 0x20 modules */
 	    unsigned char *Buffer;
 	    int BufferSize;
-	    int fd;
 
 	    if (part->PartID == 0x20)
 		sprintf(filename, "amipci_%.2X.%.2X", Multiple++, part->PartID);
 	    else
 		sprintf(filename, "amibody.%.2x", part->PartID);
-
-	    fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-	    if (fd < 0) {
-		fprintf(stderr, "Error: unable to open %s: %s\n\n",
-			filename, strerror(errno));
-		exit(1);
-	    }
 
 	    printf("Dumping part %d to %s\n", i, filename);
 
@@ -311,25 +336,9 @@ AMIBIOS95(uint32_t AMIBOffset, uint32_t ABCOffset)
 	    else
 		BufferSize = part->CSize;
 
-	     /* grow file */
-	    if (lseek(fd, BufferSize - 1, SEEK_SET) == -1) {
-		fprintf(stderr, "Error: Failed to grow \"%s\": %s\n",
-			filename, strerror(errno));
+	    Buffer = MMapOutputFile(filename, BufferSize);
+	    if (!Buffer)
 		return FALSE;
-	    }
-
-	    if (write(fd, "", 1) != 1) {
-		fprintf(stderr, "Error: Failed to write to \"%s\": %s\n",
-			filename, strerror(errno));
-		return FALSE;
-	    }
-
-	    Buffer = mmap(NULL, BufferSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	    if (Buffer == ((void *) -1)) {
-		fprintf(stderr, "Error: Failed to mmap %s: %s\n",
-			filename, strerror(errno));
-		return FALSE;
-	    }
 
 	    if (Compressed)
 		LH5Decode(BIOSImage + (Offset - BIOSOffset) + 0x14,
@@ -339,7 +348,6 @@ AMIBIOS95(uint32_t AMIBOffset, uint32_t ABCOffset)
 		       BufferSize);
 
 	    munmap(Buffer, BufferSize);
-	    close(fd);
 	}
 
 	if ((part->PrePartHi == 0xFFFF) || (part->PrePartLo == 0xFFFF))
@@ -353,7 +361,8 @@ AMIBIOS95(uint32_t AMIBOffset, uint32_t ABCOffset)
 struct {
     char *String1;
     char *String2;
-    Bool (*Handler) (uint32_t Offset1, uint32_t Offset2);
+    Bool (*Handler) (unsigned char *Image, int ImageLength, int ImageOffset,
+		     int Action, uint32_t Offset1, uint32_t Offset2);
 } BIOSIdentification[] = {
     {"AMIBOOT ROM", "AMIBIOSC", AMIBIOS95},
     {NULL, NULL, NULL},
@@ -365,12 +374,21 @@ struct {
 int
 main(int argc, char *argv[])
 {
+    int Action = 0;
+    char *FileName = NULL;
+    int FileLength = 0;
+    uint32_t BIOSOffset = 0;
+    unsigned char *BIOSImage = NULL;
     int fd;
     uint32_t Offset1, Offset2;
     int i, len;
     unsigned char *tmp;
 
-    ArgumentsParse(argc, argv);
+    FileName = ArgumentsParse(argc, argv, &Action);
+    if (!FileName) {
+	HelpPrint(argv[0]);
+	return 1;
+    }
 
     fd = open(FileName, O_RDONLY);
     if (fd < 0) {
@@ -409,7 +427,8 @@ main(int argc, char *argv[])
 	    continue;
 	Offset2 = tmp - BIOSImage;
 
-	if (BIOSIdentification[i].Handler(Offset1, Offset2))
+	if (BIOSIdentification[i].Handler(BIOSImage, FileLength, BIOSOffset, Action,
+					  Offset1, Offset2))
 	    return 0;
 	else
 	    return 1;
