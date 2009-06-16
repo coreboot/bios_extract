@@ -145,16 +145,11 @@ static char *GetCompressionName(unsigned char ID)
     }
 }
 
-static void decodeM3(interfacing interface)
+static void decodeM3(FILE *ptx, FILE *bmx, unsigned int RealLen)
 {
-    FILE *ptx, *bmx;
     unsigned short Index, Index2, DX, Loop, XorOp, i;
     unsigned char *Buffer, tmp;
-    unsigned int RealLen, Now;
-
-    ptx = interface.infile;
-    bmx = interface.outfile;
-    RealLen = interface.original;
+    unsigned int Now;
 
     Buffer = (unsigned char *) calloc(4096, 1);
     if (!Buffer)
@@ -301,20 +296,17 @@ static unsigned char TotalSec(FILE * ptx, unsigned char * Buf, unsigned char Act
 			exit(1);
 		    }
 
-		    interface.infile = ptx;
-		    interface.outfile = pto;
-		    interface.original = phhead.ExpLen1;
-		    interface.packed = phhead.Packed1;
-
-		    interface.dicbit = 13;
-		    interface.method = 5;
-
 		    /* isPacked == PackedLevel == CompressionName */
-		    if (phhead.isPacked == 0x5)
+		    if (phhead.isPacked == 0x5) {
+			interface.infile = ptx;
+			interface.outfile = pto;
+			interface.original = phhead.ExpLen1;
+			interface.packed = phhead.Packed1;
+
 			decode(interface);
-		    else if (phhead.isPacked == 0x3) {
+		    } else if (phhead.isPacked == 0x3) {
 			fseek(ptx, -4L, 1);
-			decodeM3(interface);
+			decodeM3(ptx, pto, phhead.ExpLen1);
 		    } else {
 			fseek(ptx, -4L, 1);
 			for (i = 0; i < phhead.ExpLen1; i++) {
@@ -418,21 +410,17 @@ static unsigned char TotalSecM(FILE * ptx, unsigned char * Buf, unsigned char Ac
 		exit(1);
 	    }
 
-
-	    interface.infile = ptx;
-	    interface.outfile = pto;
-	    interface.original = phhead.ExpLen1;
-	    interface.packed = phhead.Packed1;
-
-	    interface.dicbit = 13;
-	    interface.method = 5;
-
 	    /* Evidently, isPacked == PackedLevel */
-	    if (phhead.isPacked == 0x5)
+	    if (phhead.isPacked == 0x5) {
+		interface.infile = ptx;
+		interface.outfile = pto;
+		interface.original = phhead.ExpLen1;
+		interface.packed = phhead.Packed1;
+
 		decode(interface);
-	    else if (phhead.isPacked == 0x3) {
+	    } else if (phhead.isPacked == 0x3) {
 		fseek(ptx, -4L, 1);
-		decodeM3(interface);
+		decodeM3(ptx, pto, phhead.ExpLen1);
 	    } else {
 		fseek(ptx, -4L, 1);
 		for (i = 0; i < phhead.ExpLen1; i++) {

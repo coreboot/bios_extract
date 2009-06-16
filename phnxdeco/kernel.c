@@ -19,26 +19,23 @@
 #define CBIT 9
 #define USHRT_BIT 16		/* (CHAR_BIT * sizeof(ushort)) */
 
-#define MAX_DICBIT    13
-#define MAX_DICSIZ (1 << MAX_DICBIT)
+#define DICBIT    13
+#define DICSIZ (1 << DICBIT)
 #define MATCHBIT   8
 #define MAXMATCH 256
 #define THRESHOLD  3
 #define NC (UCHAR_MAX + MAXMATCH + 2 - THRESHOLD)
 
-#define NP (MAX_DICBIT + 1)
+#define NP (DICBIT + 1)
 #define NT (USHRT_BIT + 3)
 #define PBIT 4
 #define TBIT 5
 #define NPT 0x80
 
 static unsigned long origsize, compsize;
-static unsigned short dicbit;
 static unsigned long count;
 static unsigned short loc;
 static unsigned char *text;
-
-static unsigned short dicsiz;
 
 static unsigned char subbitbuf, bitcount;
 
@@ -340,20 +337,20 @@ void decode(interfacing interface)
 
     infile = interface.infile;
     outfile = interface.outfile;
-    dicbit = interface.dicbit;
     origsize = interface.original;
     compsize = interface.packed;
+
     crc = 0;
     prev_char = -1;
-    dicsiz = 1 << dicbit;
-    text = (unsigned char *) malloc(dicsiz);
+
+    text = (unsigned char *) malloc(DICSIZ);
     if (text == NULL)
 	exit(1);
 
-    memset(text, ' ', dicsiz);
+    memset(text, ' ', DICSIZ);
     decode_start_st1();
 
-    dicsiz1 = dicsiz - 1;
+    dicsiz1 = DICSIZ - 1;
     offset = 0x100 - 3;
     count = 0;
     loc = 0;
@@ -363,8 +360,8 @@ void decode(interfacing interface)
 
 	if (c <= UCHAR_MAX) {
 	    text[loc++] = c;
-	    if (loc == dicsiz) {
-		fwrite_crc(text, dicsiz, outfile);
+	    if (loc == DICSIZ) {
+		fwrite_crc(text, DICSIZ, outfile);
 		loc = 0;
 	    }
 	    count++;
@@ -375,8 +372,8 @@ void decode(interfacing interface)
 	    for (k = 0; k < j; k++) {
 		c = text[(i + k) & dicsiz1];
 		text[loc++] = c;
-		if (loc == dicsiz) {
-		    fwrite_crc(text, dicsiz, outfile);
+		if (loc == DICSIZ) {
+		    fwrite_crc(text, DICSIZ, outfile);
 		    loc = 0;
 		}
 	    }
