@@ -2,10 +2,10 @@ MAKE = make
 CFLAGS = -g -fpack-struct -Wall
 CC = gcc
 
-all: amideco lh5_test
+all: amideco
 
-amideco: amideco.c
-	$(CC) $(CFLAGS) amideco.c -o amideco
+amideco: lh5_extract.o amideco.c
+	$(CC) $(CFLAGS) lh5_extract.o amideco.c -o amideco
 
 lh5_extract.o: lh5_extract.c
 	$(CC) $(CFLAGS) -c lh5_extract.c -o lh5_extract.o

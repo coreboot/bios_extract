@@ -33,6 +33,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include "lh5_extract.h"
+
 #define Bool int
 #define FALSE 0
 #define TRUE  1
@@ -46,7 +48,7 @@ static int Action = 0;
 static char *FileName = NULL;
 static int FileLength = 0;
 static uint32_t BIOSOffset = 0;
-static char *BIOSImage = NULL;
+static unsigned char *BIOSImage = NULL;
 
 static void
 HelpPrint(char *name)
@@ -186,65 +188,6 @@ ModuleNameGet(uint8_t ID, int V95)
 }
 
 /*
- * LHA level1 header.
- */
-struct lhl1_header_pt1 {
-    uint8_t header_size;
-    uint8_t header_checksum;
-    /* !!! string "-lh5-" is 6 bytes long, but lha header has only 5 places */
-    char method_id[5];
-    uint32_t compressed_size;
-    uint32_t uncompressed_size;
-    uint32_t timestamp;
-    uint8_t nullx20;
-    uint8_t level;
-    uint8_t filename_length;
-};
-/* then the filename without '\0' */
-struct lhl1_header_pt2 {
-    uint16_t file_crc16;
-    char os_id;
-    uint16_t next_header_size;
-};
-
-static void
-lhl1_header_write(int fd, char *name,
-		  uint32_t compressed_size, uint32_t uncompressed_size)
-{
-    struct lhl1_header_pt1 head_pt1;
-    struct lhl1_header_pt2 head_pt2;
-    int checksum = 0, i;
-
-    head_pt1.header_size = sizeof(struct lhl1_header_pt1) +
-	sizeof(struct lhl1_header_pt2) + strlen(name) - 2;
-    /* checksum is for later. */
-    memcpy(head_pt1.method_id, "-lh5-", 5);
-    head_pt1.compressed_size = compressed_size;
-    head_pt1.uncompressed_size = uncompressed_size;
-    head_pt1.timestamp = 0;
-    head_pt1.nullx20 = 0x20;
-    head_pt1.level = 1;
-    head_pt1.filename_length = strlen(name);
-
-    head_pt2.file_crc16 = 0;
-    head_pt2.os_id = ' ';
-    head_pt2.next_header_size = 0;
-
-    for (i = 2; i < sizeof(struct lhl1_header_pt1); i++)
-	checksum += ((uint8_t *) &head_pt1)[i];
-    for (i = 0; i < strlen(name); i++)
-	checksum += ((uint8_t *) name)[i];
-    for (i = 0; i < sizeof(struct lhl1_header_pt2); i++)
-	checksum += ((uint8_t *) &head_pt2)[i];
-
-    head_pt1.header_checksum = checksum;
-
-    write(fd, &head_pt1, sizeof(struct lhl1_header_pt1));
-    write(fd, name, strlen(name));
-    write(fd, &head_pt2, sizeof(struct lhl1_header_pt2));
-}
-
-/*
  *
  */
 static Bool
@@ -343,20 +286,16 @@ AMIBIOS95(uint32_t AMIBOffset, uint32_t ABCOffset)
 		       i, part->PartID, ModuleNameGet(part->PartID, TRUE),
 		       Offset - BIOSOffset + 0x0C, part->CSize);
 	} else {
-	    char *filename, Buf[64], Buflzh[64];
+	    char filename[64];
 	    static uint8_t Multiple = 0; /* For the case of multiple 0x20 modules */
+	    unsigned char *Buffer;
+	    int BufferSize;
 	    int fd;
 
 	    if (part->PartID == 0x20)
-		sprintf(Buf, "amipci_%.2X.%.2X", Multiple++, part->PartID);
+		sprintf(filename, "amipci_%.2X.%.2X", Multiple++, part->PartID);
 	    else
-		sprintf(Buf, "amibody.%.2x", part->PartID);
-
-	    if (Compressed) {
-		filename = Buflzh;
-		sprintf(filename, "%s.lzh", Buf);
-	    } else
-		filename = Buf;
+		sprintf(filename, "amibody.%.2x", part->PartID);
 
 	    fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 	    if (fd < 0) {
@@ -367,20 +306,40 @@ AMIBIOS95(uint32_t AMIBOffset, uint32_t ABCOffset)
 
 	    printf("Dumping part %d to %s\n", i, filename);
 
-	    if (Compressed) {
-		 char command[64];
+	    if (Compressed)
+		BufferSize = part->ExpSize;
+	    else
+		BufferSize = part->CSize;
 
-		lhl1_header_write(fd, Buf, part->ROMSize, part->ExpSize);
-		write(fd, BIOSImage + (Offset - BIOSOffset) + 0x14, part->ROMSize);
-		close(fd);
-
-		sprintf(command, "lha x %s\n", filename);
-		if(!system(command))
-		    remove(filename);
-	    } else {
-		write(fd, BIOSImage + (Offset - BIOSOffset) + 0x0C, part->CSize);
-		close(fd);
+	     /* grow file */
+	    if (lseek(fd, BufferSize - 1, SEEK_SET) == -1) {
+		fprintf(stderr, "Error: Failed to grow \"%s\": %s\n",
+			filename, strerror(errno));
+		return FALSE;
 	    }
+
+	    if (write(fd, "", 1) != 1) {
+		fprintf(stderr, "Error: Failed to write to \"%s\": %s\n",
+			filename, strerror(errno));
+		return FALSE;
+	    }
+
+	    Buffer = mmap(NULL, BufferSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	    if (Buffer == ((void *) -1)) {
+		fprintf(stderr, "Error: Failed to mmap %s: %s\n",
+			filename, strerror(errno));
+		return FALSE;
+	    }
+
+	    if (Compressed)
+		LH5Decode(BIOSImage + (Offset - BIOSOffset) + 0x14,
+			  part->ROMSize, Buffer, BufferSize);
+	    else
+		memcpy(Buffer, BIOSImage + (Offset - BIOSOffset) + 0x0C,
+		       BufferSize);
+
+	    munmap(Buffer, BufferSize);
+	    close(fd);
 	}
 
 	if ((part->PrePartHi == 0xFFFF) || (part->PrePartLo == 0xFFFF))
@@ -409,7 +368,7 @@ main(int argc, char *argv[])
     int fd;
     uint32_t Offset1, Offset2;
     int i, len;
-    char *tmp;
+    unsigned char *tmp;
 
     ArgumentsParse(argc, argv);
 
