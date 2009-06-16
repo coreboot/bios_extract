@@ -1,0 +1,14 @@
+amideco:
+--------
+Tool to extract AMI95 BIOS into its individual submodules, will eventually
+be transformed into bios_extract.c and ami/award/phoenix/whatever.c
+
+bcpvpd:
+-------
+Extracts IBM compressed BIOS images (BCPVPD and $IBMCOMP) so that bios_extract
+can handle it.
+
+lh5_test:
+---------
+Sample program left over from development, but kept to be able to easily
+verify lh5 extraction functionality. Will not be built per default.

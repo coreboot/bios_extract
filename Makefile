@@ -2,18 +2,22 @@ MAKE = make
 CFLAGS = -g -fpack-struct -Wall
 CC = gcc
 
-all: amideco
+all: amideco bcpvpd
 
-amideco: lh5_extract.o amideco.c
-	$(CC) $(CFLAGS) lh5_extract.o amideco.c -o amideco
+AMIDECO_OBJS = lh5_extract.o amideco.o
+amideco: $(AMIDECO_OBJS)
+	$(CC) $(CFLAGS) $(AMIDECO_OBJS) -o amideco
 
-lh5_extract.o: lh5_extract.c
-	$(CC) $(CFLAGS) -c lh5_extract.c -o lh5_extract.o
+bcpvpd: bcpvpd.c
+	$(CC) $(CFLAGS) bcpvpd.c -o bcpvpd
 
-lh5_test: lh5_extract.o lh5_test.c
-	$(CC) $(CFLAGS) lh5_extract.o lh5_test.c -o lh5_test
+# just here to easily verify the functionality of the lh5 routine
+LH5_TEST_OBJS = lh5_extract.o lh5_test.o
+lh5_test: $(LH5_TEST_OBJS)
+	$(CC) $(CFLAGS) $(LH5_TEST_OBJS) -o lh5_test
 
 clean: 
 	rm -f *.o
 	rm -f amideco
+	rm -f bcpvpd
 	rm -f lh5_test
