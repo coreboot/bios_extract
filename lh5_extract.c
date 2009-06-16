@@ -27,6 +27,8 @@
  * the work at http://sourceforge.jp/projects/lha/.
  */
 
+#define _GNU_SOURCE 1
+
 #include <stdio.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -36,8 +38,6 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-
-#define FILENAME_LENGTH 1024
 
 /*
  *
@@ -87,9 +87,9 @@ calc_sum(unsigned char *p, int len)
  *
  */
 static unsigned int
-lha_header_level1_parse(unsigned char *Buffer, int BufferSize,
-			unsigned int *original_size, unsigned int *packed_size,
-			char *filename, unsigned short *crc)
+LH5HeaderParse(unsigned char *Buffer, int BufferSize,
+	       unsigned int *original_size, unsigned int *packed_size,
+	       char **name, unsigned short *crc)
 {
     unsigned int offset;
     unsigned char header_size, checksum, name_length;
@@ -137,8 +137,7 @@ lha_header_level1_parse(unsigned char *Buffer, int BufferSize,
     *original_size = *(unsigned int *) (Buffer + 11);
 
     name_length = Buffer[21];
-    memcpy(filename, Buffer + 22, name_length);
-    filename[name_length] = '\0';
+    *name = strndup((char *) Buffer + 22, name_length);
 
     *crc = *(unsigned short *) (Buffer + 22 + name_length);
 
@@ -561,7 +560,7 @@ LH5Decode(unsigned char *PackedBuffer, int PackedBufferSize,
 int
 main(int argc, char *argv[])
 {
-    char filename[FILENAME_LENGTH];
+    char *filename;
     unsigned short header_crc;
     unsigned int header_size, original_size, packed_size;
     int infd, outfd;
@@ -595,10 +594,8 @@ main(int argc, char *argv[])
 	return 1;
     }
 
-    header_size = lha_header_level1_parse(LHABuffer, LHABufferSize,
-					  &original_size, &packed_size,
-					  filename, &header_crc);
-
+    header_size = LH5HeaderParse(LHABuffer, LHABufferSize, &original_size,
+				 &packed_size, &filename, &header_crc);
     if (!header_size)
 	return 1;
 
@@ -649,6 +646,8 @@ main(int argc, char *argv[])
     if (close(outfd))
 	fprintf(stderr, "Warning: Failed to close \"%s\": %s\n",
 		filename, strerror(errno));
+
+    free(filename);
 
     /* get rid of our input file */
     if (munmap(LHABuffer, LHABufferSize))
