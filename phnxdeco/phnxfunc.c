@@ -22,12 +22,7 @@ typedef unsigned short word;
 #define	XtractM		0x20
 #define	ListM  		0x21
 
-
-#ifndef	__LINUX_NOW__
-#define IDSign		""
-#else
 #define IDSign		"+"
-#endif
 
 typedef struct {
     FILE *infile;
@@ -168,11 +163,11 @@ byte *GetModuleName(byte ID)
 	return ("WAV");
 
     case 'H':
-	return ("TCPA_H");	//      TCPA (Trust Computing), USBKCLIB?
+	return ("TCPA_H");	/* TCPA (Trust Computing), USBKCLIB? */
     case 'K':
-	return ("TCPA_K");	//      TCPA (Trust Computing), "AUTH"?
+	return ("TCPA_K");	/* TCPA (Trust Computing), "AUTH"? */
     case 'Q':
-	return ("TCPA_Q");	//      TCPA (Trust Computing), "SROM"?
+	return ("TCPA_Q");	/* TCPA (Trust Computing), "SROM"? */
     case '<':
 	return ("TCPA_<");
     case '*':
@@ -214,12 +209,9 @@ byte *GetCompressionName(byte ID)
 void decodeM3(interfacing interface)
 {
     FILE *ptx, *bmx;
-
-		/*------------------------*/
     word Index, Index2, DX, Loop, XorOp, i;
     byte *Buffer, tmp;
     dword RealLen, Now;
-		/*------------------------*/
 
     ptx = interface.infile;
     bmx = interface.outfile;
@@ -357,12 +349,10 @@ byte TotalSec(FILE * ptx, byte * Buf, byte Action, dword BankSize)
 		    interface.dicbit = 13;
 		    interface.method = 5;
 
-		/*---------------------------------------------
-		   isPacked == PackedLevel == CompressionName
-		----------------------------------------------*/
-		    if (phhead.isPacked == 0x5) {
+		    /* isPacked == PackedLevel == CompressionName */
+		    if (phhead.isPacked == 0x5)
 			decode(interface);
-		    } else if (phhead.isPacked == 0x3) {
+		    else if (phhead.isPacked == 0x3) {
 			fseek(ptx, -4L, 1);
 			decodeM3(interface);
 		    } else {
@@ -377,8 +367,6 @@ byte TotalSec(FILE * ptx, byte * Buf, byte Action, dword BankSize)
 		    printf("Done\n");
 
 		    break;
-		    /*      End of Xtract   */
-
 		}
 
 	    } else {
@@ -391,22 +379,20 @@ byte TotalSec(FILE * ptx, byte * Buf, byte Action, dword BankSize)
 		    CurPos = Tmp;
 		continue;
 	    }
-
 	    CurPos += phhead.Packed1;
 
 	} else
 	    CurPos = ftell(ptx);
-
-
     }
 
     return (TotalSec);
 }
 
 
-/*---------------Modified Module Detection & Manipulating------------
-		According to BCPSYS block
---------------------------------------------------------------------*/
+/*
+ * Modified Module Detection & Manipulating
+ * According to BCPSYS block
+ */
 byte TotalSecM(FILE * ptx, byte * Buf, byte Action, dword Start, dword ConstOff, dword SYSOff)
 {
     FILE *pto, *scr;
@@ -426,10 +412,6 @@ byte TotalSecM(FILE * ptx, byte * Buf, byte Action, dword Start, dword ConstOff,
 
     phhead.Prev = 0xFFFF0000;
     fseek(ptx, 0, 2);
-
-
-	/*-------- Start Phoenix compatible script file ----------*/
-	/*-------- End Phoenix compatible script file ----------*/
 
     switch (Action) {
     case ListM:
@@ -490,12 +472,10 @@ byte TotalSecM(FILE * ptx, byte * Buf, byte Action, dword Start, dword ConstOff,
 	    interface.dicbit = 13;
 	    interface.method = 5;
 
-		/*---------------------------------------------
-			Evidently, isPacked == PackedLevel
-		----------------------------------------------*/
-	    if (phhead.isPacked == 0x5) {
+	    /* Evidently, isPacked == PackedLevel */
+	    if (phhead.isPacked == 0x5)
 		decode(interface);
-	    } else if (phhead.isPacked == 0x3) {
+	    else if (phhead.isPacked == 0x3) {
 		fseek(ptx, -4L, 1);
 		decodeM3(interface);
 	    } else {
@@ -508,13 +488,8 @@ byte TotalSecM(FILE * ptx, byte * Buf, byte Action, dword Start, dword ConstOff,
 	    fclose(pto);
 
 	    break;
-	    /*      End of Xtract   */
-
 	}
-	/*      End of switch   */
-
     }
-    /*      End of while    */
 
     return (TotalSec);
 }
@@ -532,7 +507,7 @@ dword IsPhoenixBIOS(FILE * ptx, byte * Buf)
 	fread(Buf, 1, BLOCK, ptx);
 	if ((CurPos = FoundAt(ptx, Buf, PhoenixPattern, BLOCK)) != 0)
 	    break;
-			/*---------O'K, we got PhoenixBIOS 4.0 hook---------*/
+	/* O'K, we got PhoenixBIOS 4.0 hook */
 	CurPos = ftell(ptx) - 0x100;
     }
 
@@ -542,11 +517,11 @@ dword IsPhoenixBIOS(FILE * ptx, byte * Buf)
 	    fread(Buf, 1, BLOCK, ptx);
 	    if ((CurPos = FoundAt(ptx, Buf, FirstPattern, BLOCK)) != 0)
 		break;
-			/*---------O'K, we got Phoenix FirstBIOS hook---------*/
+	    /* O'K, we got Phoenix FirstBIOS hook */
 	    CurPos = ftell(ptx) - 0x100;
 	}
 
-			/*---------Neither PhoenixBIOS 4.0 nor FirstBIOS---*/
+	/* Neither PhoenixBIOS 4.0 nor FirstBIOS */
 	if (feof(ptx))
 	    return (0);
 

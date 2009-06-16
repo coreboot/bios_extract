@@ -20,19 +20,69 @@
 
 #include	<stdio.h>
 #include	<stdlib.h>
-
-#if defined(LINUX) || defined(__LINUX__) || defined(__linux__)
 #include	<memory.h>
-#define	__LINUX_NOW__
-#else
-#include	<mem.h>
-#include	<conio.h>
-#endif
 
-#include	"./phnxdeco.h"
-#include	"./phnxsoft.h"
-#include	"./phnxver.h"
-#include	"./phnxhelp.h"
+#include	"phnxdeco.h"
+
+#define SftPlatform	"Linux"
+#define SftVersion      "0.33 ("SftPlatform")"
+#define SftName         "PhoenixDeco"
+#define SftEMail        "Anton Borisov, anton.borisov@gmail.com"
+
+byte SoftName[] = "-=" SftName ", version " SftVersion "=-";
+byte CopyRights[] = "\n(C) Anton Borisov, 2000, 2002-2004, Portions (C) 1999-2000";
+byte Url[] = "Bug-reports direct to " SftEMail;
+
+byte HelpSystem(byte argc, byte * argv[])
+{
+    byte x = 0, retcode = 0;
+
+    for (x = 1; x < argc; x++) {
+	if (StrCmp(argv[x], "-h") == 0) {
+	    printf("\n" SftName " HelpSystem Starting Now!\n");
+	    printf("\nThis Program Version Number %s", SftVersion);
+	    printf("\n" SftName " - Decompressor for PhoenixBIOSes only.\n" "\tSupported formats: Phoenix BIOS 4.0, Phoenix FirstBIOS\n\n" "" SftName
+		   " performs on 386 or better CPU systems\n" "under control of LinuxOS\n\n" "Compression schemes include: NONE, LZSS, LZINT\n\n"
+		   "Modules marked with " IDSign " sign are compressed modules\n\n" "\tBug reports mailto: " SftEMail "\n" "\t\tCompiled: %s, %s with \n\t\t%s",
+		   __DATE__, __TIME__, __VERSION__);
+	    printf("\n");
+	    retcode = 0x80;
+
+	}
+
+	if (StrCmp(argv[x], "-xs") == 0)
+	    retcode = 0x20;
+	if (StrCmp(argv[x], "-ls") == 0)
+	    retcode = 0x21;
+	if (StrCmp(argv[x], "-x") == 0)
+	    retcode = 0x10;
+	if (StrCmp(argv[x], "-l") == 0)
+	    retcode = 0x11;
+	if (StrCmp(argv[x], "-c") == 0)
+	    retcode += 0x40;
+    }
+    return (retcode);
+
+}
+
+void PrintHeader(byte * EOL)
+{
+
+    printf("\n%c%s%c%s", 0x4, SoftName, 0x4, EOL);
+
+}
+
+void PrintUsage()
+{
+
+    PrintHeader("");
+    printf("%s", CopyRights);
+    printf("\n\nUsage: PhnxDeco <PhoenixBIOS.ROM> [Options]");
+    printf("\n" "\t\tOptions:" "\n\t\t\t\"-ls\" List (System) Bios Structure" "\n\t\t\t\"-xs\" eXtract (System) Bios Modules"
+	   "\n\t\t\t\"-l\" List Bios Structure" "\n\t\t\t\"-x\" eXtract Bios Modules" "\n\t\t\t\"-c\" show Bios Copyrights" "\n\t\t\t\"-h\" Help statistics");
+    printf("\n\n\t*%s*\n", Url);
+
+}
 
 int main(byte argc, byte * argv[])
 {
@@ -49,20 +99,6 @@ int main(byte argc, byte * argv[])
     PHNXID IDMod;
 
     byte __COPY__ = 0;
-
-
-#ifndef __LINUX_NOW__
-    clrscr();
-#endif
-
-
-#ifdef	__DEBUG__
-//      argv[1] = "C:\\phnx\\z.bin";
-    argv[1] = "C:\\phnx\\10410.bin";
-//      argv[1] = "C:\\firmware.111";
-    argv[2] = "-l";
-    argc = 3;
-#endif
 
     switch (HelpSystem(argc, argv)) {
     case 0x80:
@@ -123,7 +159,7 @@ int main(byte argc, byte * argv[])
 	fread(Buf, 1, BLOCK, ptx);
 	if ((CurPos = FoundAt(ptx, Buf, BCPSEGMENT, BLOCK)) != 0)
 	    break;
-				/*-----O'K, we got PhoenixBIOS BCPSEGMENT hook-------*/
+	/* O'K, we got PhoenixBIOS BCPSEGMENT hook */
 	CurPos = ftell(ptx) - 0x100;
 
     }
@@ -140,9 +176,7 @@ int main(byte argc, byte * argv[])
     while (IDMod.Name[0] != 0x0 && IDMod.Len != 0x0) {
 	fread(&IDMod, 1, sizeof(IDMod), ptx);
 
-			/*--------Wrong Count w/ ALR and some S/N ---------
-				internal errors ?
-			---------------------------------------------------*/
+	/* Wrong Count w/ ALR and some S/N internal errors ? */
 	if (IDMod.Name[0] < 0x41 && IDMod.Name[0] != 0x0) {
 	    do {
 		fread(Buf, 1, 1, ptx);
@@ -164,13 +198,13 @@ int main(byte argc, byte * argv[])
 	    Mods++;
     }
 
-		/*-----Looking for BCPFCP control structure------------*/
+    /* Looking for BCPFCP control structure */
     rewind(ptx);
     while (!feof(ptx)) {
 	fread(Buf, 1, BLOCK, ptx);
 	if ((CurPos = FoundAt(ptx, Buf, BCPFCP, BLOCK)) != 0)
 	    break;
-				/*---------O'K, we got this hook-----------*/
+	/* O'K, we got this hook */
 	CurPos = ftell(ptx) - 0x100;
 
     }
@@ -190,12 +224,12 @@ int main(byte argc, byte * argv[])
     fread(&phtime, 1, 8, ptx);
 
     fseek(ptx, SYSOff + 0x77, 0);
-			/*-----Move to the pointer of 1st module-----*/
+    /* Move to the pointer of 1st module */
     fread(&Start, 1, sizeof(Start), ptx);
     Offset = (0xFFFE0000 - (ftell(ptx) & 0xFFFE0000));
     Start -= Offset;
 
-			/*-----Move to the DEVEL string------------*/
+    /* Move to the DEVEL string */
     fseek(ptx, SYSOff + 0x37, 0);
     fread(Buf, 1, 8, ptx);
 
@@ -216,16 +250,8 @@ int main(byte argc, byte * argv[])
 
     printf("/* Copyrighted Information */\n");
 
-
-    if (__COPY__)
-
-	/*
-	   If .rom begins with no additional trash
-	   this routine should be applied
-	 */
-
-    {
-
+    /* If .rom begins with no additional trash this routine should be applied */
+    if (__COPY__) {
 	fseek(ptx, POSTOff + 0x1B, 0);
 
 	fread(&CurPos, 1, sizeof(word), ptx);
@@ -242,16 +268,8 @@ int main(byte argc, byte * argv[])
 
     printf("\t%.64s\n", Buf);
 
-
-    if (__COPY__)
-
-	/*
-	   If .rom begins with no additional trash
-	   this routine should be applied
-	 */
-
-    {
-
+    /* If .rom begins with no additional trash this routine should be applied */
+    if (__COPY__) {
 	fseek(ptx, POSTOff + 0x38, 0);
 	fread(&CurPos, 1, sizeof(word), ptx);
 	fseek(ptx, (POSTOff & 0xF0000) + (CurPos & 0xffff), 0);

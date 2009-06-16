@@ -6,7 +6,7 @@
 **
 ***********************************************/
 
-/* ------ 26 Jan 2003 ------- 
+/* ------ 26 Jan 2003 -------
 **	New Name Conventions
 * ------------------------- */
 
@@ -23,14 +23,7 @@ typedef unsigned short word;
 #define	ListM  		0x21
 
 
-#ifndef	__LINUX_NOW__
-#define IDSign		""
-#else
 #define IDSign		"+"
-#endif
-
-
-//#define       __DEBUG__
 
 typedef struct {
     FILE *infile;
@@ -82,9 +75,7 @@ void decodeM3(interfacing interface);
 
 byte TotalSec(FILE * ptx, byte * Buf, byte Action, dword BankSize);
 
-/*---------------Modified Module Detection & Manipulating------------
-		According to BCPSYS block
---------------------------------------------------------------------*/
+/* Modified Module Detection & Manipulating According to BCPSYS block */
 byte TotalSecM(FILE * ptx, byte * Buf, byte Action, dword Start, dword ConstOff, dword SYSOff);
 
 dword IsPhoenixBIOS(FILE * ptx, byte * Buf);
