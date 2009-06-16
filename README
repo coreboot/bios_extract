@@ -1,7 +1,7 @@
-amideco:
---------
-Tool to extract AMI95 BIOS into its individual submodules, will eventually
-be transformed into bios_extract.c and ami/award/phoenix/whatever.c
+bios_extract:
+-------------
+Tool to extract the different submodules of common legacy bioses. Currently
+only supports AMI95 bioses.
 
 bcpvpd:
 -------

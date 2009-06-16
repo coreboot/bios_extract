@@ -2,11 +2,11 @@ MAKE = make
 CFLAGS = -g -fpack-struct -Wall
 CC = gcc
 
-all: amideco bcpvpd
+all: bios_extract bcpvpd
 
-AMIDECO_OBJS = lh5_extract.o amideco.o
-amideco: $(AMIDECO_OBJS)
-	$(CC) $(CFLAGS) $(AMIDECO_OBJS) -o amideco
+BIOS_EXTRACT_OBJS = lh5_extract.o ami.o bios_extract.o
+bios_extract: $(BIOS_EXTRACT_OBJS)
+	$(CC) $(CFLAGS) $(BIOS_EXTRACT_OBJS) -o bios_extract
 
 bcpvpd: bcpvpd.c
 	$(CC) $(CFLAGS) bcpvpd.c -o bcpvpd
@@ -18,6 +18,6 @@ lh5_test: $(LH5_TEST_OBJS)
 
 clean: 
 	rm -f *.o
-	rm -f amideco
+	rm -f bios_extract
 	rm -f bcpvpd
 	rm -f lh5_test
