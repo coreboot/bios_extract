@@ -48,7 +48,7 @@ byte HelpSystem(byte argc, byte *argv[])
 
 			if( StrCmp(argv[x], "-xs" ) == 0 ) retcode = 0x20;
 			if( StrCmp(argv[x], "-ls" ) == 0 ) retcode = 0x21;
-			if( StrCmp(argv[x], "-x " ) == 0 ) retcode = 0x10;
+			if( StrCmp(argv[x], "-x" ) == 0 ) retcode = 0x10;
 			if( StrCmp(argv[x], "-l"  ) == 0 ) retcode = 0x11;
 			if( StrCmp(argv[x], "-c"  ) == 0 ) retcode += 0x40;
 		}
