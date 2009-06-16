@@ -29,16 +29,16 @@
 #define SftName         "PhoenixDeco"
 #define SftEMail        "Anton Borisov, anton.borisov@gmail.com"
 
-byte SoftName[] = "-=" SftName ", version " SftVersion "=-";
-byte CopyRights[] = "\n(C) Anton Borisov, 2000, 2002-2004, Portions (C) 1999-2000";
-byte Url[] = "Bug-reports direct to " SftEMail;
+static char SoftName[] = "-=" SftName ", version " SftVersion "=-";
+static char CopyRights[] = "\n(C) Anton Borisov, 2000, 2002-2004, Portions (C) 1999-2000";
+static char Url[] = "Bug-reports direct to " SftEMail;
 
-byte HelpSystem(byte argc, byte * argv[])
+static unsigned char HelpSystem(int argc, char *argv[])
 {
-    byte x = 0, retcode = 0;
+    unsigned char x = 0, retcode = 0;
 
     for (x = 1; x < argc; x++) {
-	if (StrCmp(argv[x], "-h") == 0) {
+	if (strcmp(argv[x], "-h") == 0) {
 	    printf("\n" SftName " HelpSystem Starting Now!\n");
 	    printf("\nThis Program Version Number %s", SftVersion);
 	    printf("\n" SftName " - Decompressor for PhoenixBIOSes only.\n" "\tSupported formats: Phoenix BIOS 4.0, Phoenix FirstBIOS\n\n" "" SftName
@@ -50,29 +50,29 @@ byte HelpSystem(byte argc, byte * argv[])
 
 	}
 
-	if (StrCmp(argv[x], "-xs") == 0)
+	if (strcmp(argv[x], "-xs") == 0)
 	    retcode = 0x20;
-	if (StrCmp(argv[x], "-ls") == 0)
+	if (strcmp(argv[x], "-ls") == 0)
 	    retcode = 0x21;
-	if (StrCmp(argv[x], "-x") == 0)
+	if (strcmp(argv[x], "-x") == 0)
 	    retcode = 0x10;
-	if (StrCmp(argv[x], "-l") == 0)
+	if (strcmp(argv[x], "-l") == 0)
 	    retcode = 0x11;
-	if (StrCmp(argv[x], "-c") == 0)
+	if (strcmp(argv[x], "-c") == 0)
 	    retcode += 0x40;
     }
     return (retcode);
 
 }
 
-void PrintHeader(byte * EOL)
+static void PrintHeader(char * EOL)
 {
 
     printf("\n%c%s%c%s", 0x4, SoftName, 0x4, EOL);
 
 }
 
-void PrintUsage()
+static void PrintUsage()
 {
 
     PrintHeader("");
@@ -84,21 +84,21 @@ void PrintUsage()
 
 }
 
-int main(byte argc, byte * argv[])
+int main(int argc, char *argv[])
 {
     FILE *ptx;
-    byte *Buf;
-    dword CurPos, fLen, Start, Offset;
-    word i, Len, FirstBLK, BBsz, BANKsz;
-    dword POSTOff, SYSOff, FCPOff, FirstBLKf;
-    byte PhBIOS[] = "Phoenix FirstBIOS", PhVersion[3], PhRelease[3], phtime[8];
-    byte BCPSEGMENT[] = "BCPSEGMENT";
-    byte BCPFCP[] = "BCPFCP";
-    AMIDATE phdate;
-    byte TotalSections = 0, Action, Mods = 0;
+    unsigned char *Buf;
+    unsigned int CurPos, fLen, Start, Offset;
+    word i, FirstBLK, BBsz, BANKsz;
+    unsigned int POSTOff, SYSOff, FCPOff, FirstBLKf;
+    unsigned char phtime[8];
+    char BCPSEGMENT[] = "BCPSEGMENT";
+    char BCPFCP[] = "BCPFCP";
+    char phdate[9]; /* XX/XX/XX\0 */
+    unsigned char TotalSections = 0, Action, Mods = 0;
     PHNXID IDMod;
 
-    byte __COPY__ = 0;
+    unsigned char __COPY__ = 0;
 
     switch (HelpSystem(argc, argv)) {
     case 0x80:
@@ -136,7 +136,7 @@ int main(byte argc, byte * argv[])
 	return 0;
     };
 
-    Buf = (byte *) calloc(BLOCK, 1);
+    Buf = (unsigned char *) calloc(BLOCK, 1);
     if (!Buf) {
 	printf("Memory Error..\n");
 	return 0;
@@ -151,7 +151,7 @@ int main(byte argc, byte * argv[])
     fseek(ptx, 0, 2);
     fLen = ftell(ptx);
     rewind(ptx);
-    printf("Filelength\t: %lX (%lu bytes)\n", fLen, fLen);
+    printf("Filelength\t: %X (%u bytes)\n", fLen, fLen);
     printf("Filename\t: %s\n", argv[1]);
 
 
@@ -169,9 +169,9 @@ int main(byte argc, byte * argv[])
 	exit(1);
     }
 
-    printf("PhoenixBIOS hook found at\t: %lX\n", CurPos);
+    printf("PhoenixBIOS hook found at\t: %X\n", CurPos);
     CurPos += 10;
-    fseek(ptx, (dword) (CurPos), 0);
+    fseek(ptx, (unsigned int) (CurPos), 0);
 
     while (IDMod.Name[0] != 0x0 && IDMod.Len != 0x0) {
 	fread(&IDMod, 1, sizeof(IDMod), ptx);
@@ -191,7 +191,7 @@ int main(byte argc, byte * argv[])
 	if (memcmp(IDMod.Name, "BCPSYS", 6) == 0)
 	    SYSOff = CurPos;
 	CurPos += IDMod.Len;
-	fseek(ptx, (dword) (CurPos), 0);
+	fseek(ptx, (unsigned int) (CurPos), 0);
 	if (IDMod.Name[0] == 0x0 || IDMod.Name[0] < 0x41)
 	    break;
 	else
@@ -210,7 +210,7 @@ int main(byte argc, byte * argv[])
     }
     FCPOff = CurPos;
 
-    printf("System Information at\t\t: %lX\n", SYSOff);
+    printf("System Information at\t\t: %X\n", SYSOff);
 
     fseek(ptx, SYSOff + 0x7E, 0);
     fread(&BBsz, 1, sizeof(BBsz), ptx);
@@ -219,7 +219,8 @@ int main(byte argc, byte * argv[])
     fread(&BANKsz, 1, sizeof(BANKsz), ptx);
 
     fseek(ptx, SYSOff + 15, 0);
-    fread(&phdate, 1, sizeof(phdate), ptx);
+    fread(&phdate, 1, 8, ptx);
+    phdate[8] = 0;
     fread(Buf, 1, 1, ptx);
     fread(&phtime, 1, 8, ptx);
 
@@ -233,20 +234,20 @@ int main(byte argc, byte * argv[])
     fseek(ptx, SYSOff + 0x37, 0);
     fread(Buf, 1, 8, ptx);
 
-    printf("BootBlock\t: %lX bytes\n", (BBsz == 0x0) ? (0x10000) : (BBsz));
-    printf("BankSize\t: %li KB\n", BANKsz);
+    printf("BootBlock\t: %X bytes\n", (BBsz == 0x0) ? (0x10000) : (BBsz));
+    printf("BankSize\t: %i KB\n", BANKsz);
     printf("Version\t\t: %8.8s\n", Buf);
-    printf("Start\t\t: %lX\n", Start);
-    printf("Offset\t\t: %lX\n", 0xFFFF0000 - Offset);
+    printf("Start\t\t: %X\n", Start);
+    printf("Offset\t\t: %X\n", 0xFFFF0000 - Offset);
 
     printf("BCP Modules\t: %i\n", Mods);
-    printf("BCPFCP\t\t: %lX\n", FCPOff);
+    printf("BCPFCP\t\t: %X\n", FCPOff);
     fseek(ptx, FCPOff + 0x18, 0);
     fread(&FirstBLK, 1, sizeof(FirstBLK), ptx);
     FirstBLKf = (ftell(ptx) & 0xF0000) + FirstBLK;
-    printf("FCP 1st module\t: %lX (%lX)\n", FirstBLK, FirstBLKf);
+    printf("FCP 1st module\t: %X (%X)\n", FirstBLK, FirstBLKf);
 
-    printf("Released\t: %s at %8.8s\n", GetFullDate(phdate.Month, phdate.Day, phdate.Year), phtime);
+    printf("Released\t: %s at %8.8s\n", phdate, phtime);
 
     printf("/* Copyrighted Information */\n");
 
@@ -261,7 +262,7 @@ int main(byte argc, byte * argv[])
 
 
 	CurPos = IsPhoenixBIOS(ptx, Buf);
-	fseek(ptx, (dword) (CurPos), 0);
+	fseek(ptx, (unsigned int) (CurPos), 0);
     };
 
     fread(Buf, 1, 0x100, ptx);

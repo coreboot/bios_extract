@@ -7,9 +7,11 @@
 ***
 ***********************************************/
 
-#include	<stdio.h>
-#include	<stdlib.h>
-#include	<memory.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <memory.h>
+
+#include "phnxdeco.h"
 
 #define UCHAR_MAX ((1<<(sizeof(unsigned char)*8))-1)
 #define CHAR_BIT  8
@@ -30,39 +32,25 @@
 #define TBIT 5
 #define NPT 0x80
 
-unsigned long origsize, compsize;
-unsigned short dicbit;
-unsigned short maxmatch;
-unsigned long count;
-unsigned short loc;
-unsigned char *text;
+static unsigned long origsize, compsize;
+static unsigned short dicbit;
+static unsigned long count;
+static unsigned short loc;
+static unsigned char *text;
 
 static unsigned short dicsiz;
 
 static unsigned char subbitbuf, bitcount;
 
-unsigned short crc, bitbuf;
-int prev_char;
-long reading_size;
+static unsigned short crc, bitbuf;
+static int prev_char;
 
-unsigned short left[2 * NC - 1], right[2 * NC - 1];
-unsigned char c_len[NC], pt_len[NPT];
-unsigned short c_table[4096], c_code[NC], pt_table[256], pt_code[NPT];
-static unsigned char *buf;
-static unsigned short bufsiz;
+static unsigned short left[2 * NC - 1], right[2 * NC - 1];
+static unsigned char c_len[NC], pt_len[NPT];
+static unsigned short c_table[4096], pt_table[256];
 static unsigned short blocksize;
 
-FILE *infile, *outfile;
-
-typedef struct {
-    FILE *infile;
-    FILE *outfile;
-    unsigned long original;
-    unsigned long packed;
-    int dicbit;
-    int method;
-} interfacing;
-
+static FILE *infile, *outfile;
 
 static short c, n, tblsiz, len, depth, maxdepth, avail;
 static unsigned short codeword, bit, *tbl;
@@ -122,7 +110,7 @@ static short mktbl(void)
 /****************************************/
 /*	make_table()			*/
 /****************************************/
-void make_table(short nchar, unsigned char bitlen[], short tablebits, unsigned short table[])
+static void make_table(short nchar, unsigned char bitlen[], short tablebits, unsigned short table[])
 {
     n = avail = nchar;
     blen = bitlen;
@@ -146,7 +134,7 @@ void make_table(short nchar, unsigned char bitlen[], short tablebits, unsigned s
 /****************************************/
 /*	fillbif()			*/
 /****************************************/
-void fillbuf(unsigned char n)
+static void fillbuf(unsigned char n)
 {				/* Shift bitbuf n bits left, read n bits */
     while (n > bitcount) {
 	n -= bitcount;
@@ -167,7 +155,7 @@ void fillbuf(unsigned char n)
 /****************************************/
 /*	getbits()			*/
 /****************************************/
-unsigned short getbits(unsigned char n)
+static unsigned short getbits(unsigned char n)
 {
     unsigned short x;
 
@@ -179,7 +167,7 @@ unsigned short getbits(unsigned char n)
 /****************************************/
 /*	fwrite_crc()			*/
 /****************************************/
-void fwrite_crc(unsigned char *p, int n, FILE * fp)
+static void fwrite_crc(unsigned char *p, int n, FILE * fp)
 {
 
     if (fp) {
@@ -193,7 +181,7 @@ void fwrite_crc(unsigned char *p, int n, FILE * fp)
 /****************************************/
 /*	init_getbits()			*/
 /****************************************/
-void init_getbits(void)
+static void init_getbits(void)
 {
     bitbuf = 0;
     subbitbuf = 0;
@@ -285,7 +273,7 @@ static void read_c_len(void)
     }
 }
 
-unsigned short decode_c_st1(void)
+static unsigned short decode_c_st1(void)
 {
     unsigned short j, mask;
 
@@ -314,7 +302,7 @@ unsigned short decode_c_st1(void)
     return j;
 }
 
-unsigned short decode_p_st1(void)
+static unsigned short decode_p_st1(void)
 {
     unsigned short j, mask;
 
@@ -338,7 +326,7 @@ unsigned short decode_p_st1(void)
     return j;
 }
 
-void decode_start_st1(void)
+static void decode_start_st1(void)
 {
     init_getbits();
     blocksize = 0;

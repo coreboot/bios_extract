@@ -10,10 +10,7 @@
 **	New Name Conventions
 * ------------------------- */
 
-#include	<stdio.h>
-
-typedef unsigned char byte;
-typedef unsigned long dword;
+//typedef unsigned long dword;
 typedef unsigned short word;
 
 #define	BLOCK		0x8000
@@ -35,47 +32,34 @@ typedef struct {
 } interfacing;
 
 typedef struct {
-    byte Month[2];
-    byte rsrv1;
-    byte Day[2];
-    byte rsrv2;
-    byte Year[2];
-} AMIDATE;
-
-typedef struct {
-    dword Prev;
-    byte Sig[3];
-    byte ID_HI;
-    byte ID_LO;
-    byte HeadLen;
-    byte isPacked;
+    unsigned int Prev;
+    unsigned char Sig[3];
+    unsigned char ID_HI;
+    unsigned char ID_LO;
+    unsigned char HeadLen;
+    unsigned char isPacked;
     word Offset;
     word Segment;
-    dword ExpLen1;
-    dword Packed1;
-    dword Packed2;
-    dword ExpLen2;
+    unsigned int ExpLen1;
+    unsigned int Packed1;
+    unsigned int Packed2;
+    unsigned int ExpLen2;
 } PHOENIXHEAD;
 
 typedef struct {
-    byte Name[6];
+    unsigned char Name[6];
     word Flags;
     word Len;
 } PHNXID;
 
-byte StrLen(byte * Str);
-byte StrCmp(byte * Dst, byte * Src);
+unsigned int FoundAt(FILE * ptx, unsigned char * Buf, char *Pattern, unsigned int BLOCK_LEN);
 
-dword FoundAt(FILE * ptx, byte * Buf, byte * Pattern, dword BLOCK_LEN);
-byte *GetFullDate(byte * mon, byte * day, byte * year);
-
-byte *GetModuleName(byte ID);
-byte *GetCompressionName(byte ID);
-void decodeM3(interfacing interface);
-
-byte TotalSec(FILE * ptx, byte * Buf, byte Action, dword BankSize);
+unsigned char TotalSec(FILE * ptx, unsigned char * Buf, unsigned char Action, unsigned int BankSize);
 
 /* Modified Module Detection & Manipulating According to BCPSYS block */
-byte TotalSecM(FILE * ptx, byte * Buf, byte Action, dword Start, dword ConstOff, dword SYSOff);
+unsigned char TotalSecM(FILE * ptx, unsigned char * Buf, unsigned char Action, unsigned int Start, unsigned int ConstOff, unsigned int SYSOff);
 
-dword IsPhoenixBIOS(FILE * ptx, byte * Buf);
+unsigned int IsPhoenixBIOS(FILE * ptx, unsigned char * Buf);
+
+/* kernel.c */
+void decode(interfacing interface);
