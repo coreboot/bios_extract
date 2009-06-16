@@ -1,7 +1,7 @@
 CFLAGS = -g -fpack-struct -Wall
 CC = gcc
 
-OBJS= phnxfunc.o kernel.o phnxdeco.o
+OBJS = kernel.o phnxdeco.o
 
 all: phnxdeco
 
