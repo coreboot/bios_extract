@@ -145,15 +145,16 @@ static char *GetCompressionName(unsigned char ID)
     }
 }
 
+/*
+ * This is nothing but the lzss algo, done rather horribly wrong.
+ */
 static void decodeM3(FILE *ptx, FILE *bmx, unsigned int RealLen)
 {
-    unsigned short Index, Index2, DX, Loop, XorOp, i;
-    unsigned char *Buffer, tmp;
+    unsigned short Index, Index2, DX, Loop, i;
+    unsigned char Buffer[0x1000], tmp;
     unsigned int Now;
 
-    Buffer = (unsigned char *) calloc(4096, 1);
-    if (!Buffer)
-	return;
+    memset(Buffer, 0, 0x1000);
 
     DX = 0;
     Index = 0xFEE;
@@ -162,19 +163,16 @@ static void decodeM3(FILE *ptx, FILE *bmx, unsigned int RealLen)
     for (;;) {
 	DX >>= 1;
 	if ((DX & 0x100) == 0) {
-	    if (Now >= RealLen) {
-		free(Buffer);
+	    if (Now >= RealLen)
 		return;
-	    }
 	    fread(&tmp, 1, 1, ptx);
 	    DX = (unsigned short) (0xFF) * 0x100 + tmp;
 	};
 
 	if ((DX & 0x1) != 0) {
-	    if (Now++ >= RealLen) {
-		free(Buffer);
+	    if (Now++ >= RealLen)
 		return;
-	    }
+
 	    fread(&tmp, 1, 1, ptx);
 	    fwrite(&tmp, 1, 1, bmx);
 	    Buffer[Index++] = tmp;
@@ -182,33 +180,23 @@ static void decodeM3(FILE *ptx, FILE *bmx, unsigned int RealLen)
 	    continue;
 	};
 
-	Index2 = Index;
-	if (Now >= RealLen) {
-	    free(Buffer);
-	    return;
-	}
+	fread(&Index2, 1, 1, ptx);
+	Index2 &= 0xFF;
+
 	fread(&tmp, 1, 1, ptx);
-	Index = (unsigned short) tmp;
-	if (Now >= RealLen) {
-	    free(Buffer);
-	    return;
-	}
-	fread(&tmp, 1, 1, ptx);
-	Loop = (unsigned short) tmp & 0xf;
-	Loop += 3;
-	XorOp = (unsigned short) tmp & 0xf0;
-	XorOp <<= 4;
-	Index |= XorOp;
+
+	Index2 += (tmp & 0xF0) << 4;
+	Loop = (tmp & 0xf) + 3;
+
 	for (i = 0; i < Loop; i++) {
-	    tmp = Buffer[Index++];
-	    Index &= 0xFFF;
-	    fwrite(&tmp, 1, 1, bmx);
-	    Buffer[Index2++] = tmp;
+	    tmp = Buffer[Index2++];
 	    Index2 &= 0xFFF;
+	    fwrite(&tmp, 1, 1, bmx);
+	    Buffer[Index++] = tmp;
+	    Index &= 0xFFF;
 	}
 
 	Now += Loop;
-	Index = Index2;
     }
 
 }
