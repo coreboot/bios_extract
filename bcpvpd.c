@@ -36,67 +36,7 @@
 #include <string.h>
 #include <sys/mman.h>
 
-static inline int
-BufferWrite(int fd, unsigned char *Buffer, int *BufferCount, unsigned char value)
-{
-    Buffer[*BufferCount] = value;
-    *BufferCount += 1;
-
-    if (*BufferCount == 0x1000) {
-	if (write(fd, Buffer, 0x1000) != 0x1000) {
-	    fprintf(stderr, "Error writing to output file: %s",
-		    strerror(errno));
-	    return 1;
-	}
-	*BufferCount = 0;
-    }
-
-    return 0;
-}
-
-static int
-BCPVPDExtract(unsigned char *Input, int InputSize, int fd)
-{
-    unsigned char Buffer[0x1000];
-    unsigned short BitBuffer = 0;
-    int i = 0, k, BitCount = 8, BufferCount = 0;
-
-    while (i < InputSize) {
-
-	if (BitCount == 8) {
-	    BitBuffer = Input[i];
-	    BitCount = -1;
-	} else if ((BitBuffer >> BitCount) & 0x01) {
-	    if (BufferWrite(fd, Buffer, &BufferCount, Input[i]))
-		return 1;
-	} else if ((i + 1) < InputSize) {
-	    int offset = ((Input[i] | ((Input[i + 1] & 0xF0) << 4)) - 0xFEE) & 0xFFF;
-	    int length = (Input[i + 1] & 0x0F) + 3;
-
-	    for (k = 0; k < length; k++) {
-		if (BufferWrite(fd, Buffer, &BufferCount, Buffer[(offset + k) & 0xFFF]))
-		    return 1;
-	    }
-	    i++;
-	} else {
-	    fprintf(stderr, "Error: requesting data beyond end of input file.\n");
-	    return 1;
-	}
-
-	i++;
-	BitCount++;
-    }
-
-    if (BufferCount) {
-	if (write(fd, Buffer, BufferCount) != BufferCount) {
-	    fprintf(stderr, "Error writing to output file: %s",
-		    strerror(errno));
-	    return 1;
-	}
-    }
-
-    return 0;
-}
+#include "lzss_extract.h"
 
 int
 main(int argc, char *argv[])
@@ -150,5 +90,5 @@ main(int argc, char *argv[])
         return 1;
     }
 
-    return BCPVPDExtract(InputBuffer + 0x52, InputBufferSize - 0x52, outfd);
+    return LZSSExtract(InputBuffer + 0x52, InputBufferSize - 0x52, outfd);
 }

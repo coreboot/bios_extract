@@ -8,8 +8,9 @@ BIOS_EXTRACT_OBJS = lh5_extract.o ami.o bios_extract.o
 bios_extract: $(BIOS_EXTRACT_OBJS)
 	$(CC) $(CFLAGS) $(BIOS_EXTRACT_OBJS) -o bios_extract
 
-bcpvpd: bcpvpd.c
-	$(CC) $(CFLAGS) bcpvpd.c -o bcpvpd
+BCPVPD_OBJS = lzss_extract.o bcpvpd.o
+bcpvpd: $(BCPVPD_OBJS)
+	$(CC) $(CFLAGS) $(BCPVPD_OBJS) -o bcpvpd
 
 # just here to easily verify the functionality of the lh5 routine
 LH5_TEST_OBJS = lh5_extract.o lh5_test.o
