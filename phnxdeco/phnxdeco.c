@@ -209,8 +209,8 @@ static unsigned char TotalSecM(FILE * ptx, unsigned char * Buf, unsigned char Ac
 	switch (Action) {
 	case List:
 
-	    printf("\n%c  %.1X   %1d    %8X  %8X  %5.X    %8X   %5.2Xh", phhead.ID_LO, phhead.ID_HI,
-		   phhead.isPacked, blkstart, blkend + phhead.Packed1, phhead.Packed1, phhead.Prev, Start);
+	    printf("\n%c  %.1X   %1d    %8X  %8X  %5.X    %8X   %5.2Xh %05X", phhead.ID_LO, phhead.ID_HI,
+		   phhead.isPacked, blkstart, blkend + phhead.Packed1, phhead.Packed1, phhead.Prev, Start, phhead.Segment << 16 | phhead.Offset);
 
 
 	    break;
