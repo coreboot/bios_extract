@@ -28,6 +28,10 @@ unsigned char *MMapOutputFile(char *filename, int size);
 
 /* ami.c */
 Bool AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
-		  Bool Extract, uint32_t AMIBOffset, uint32_t ABCOffset);
+		  Bool Extract, uint32_t Offset1, uint32_t Offset2);
+
+/* phoenix.c */
+Bool PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
+		    Bool Extract, uint32_t Offset1, uint32_t Offset2);
 
 #endif /* BIOS_EXTRACT_H */

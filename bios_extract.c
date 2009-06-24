@@ -140,6 +140,8 @@ static struct {
 		     Bool Extract, uint32_t Offset1, uint32_t Offset2);
 } BIOSIdentification[] = {
     {"AMIBOOT ROM", "AMIBIOSC", AMI95Extract},
+    //{"Phoenix FirstBIOS", "BCPSEGMENT", PhoenixExtract},
+    {"PhoenixBIOS 4.0", "BCPSEGMENT", PhoenixExtract},
     {NULL, NULL, NULL},
 };
 
