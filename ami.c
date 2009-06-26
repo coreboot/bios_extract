@@ -94,7 +94,7 @@ AMI95ModuleNames[] = {
 };
 
 static char *
-AMI95ModuleNameGet(uint8_t ID, int V95)
+AMI95ModuleNameGet(uint8_t ID)
 {
     int i;
 
@@ -102,14 +102,14 @@ AMI95ModuleNameGet(uint8_t ID, int V95)
 	if (AMI95ModuleNames[i].Id == ID)
 	    return AMI95ModuleNames[i].Name;
 
-    return "";
+    return NULL;
 }
 
 /*
  *
  */
 Bool
-AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset, Bool Extract,
+AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	     uint32_t AMIBOffset, uint32_t ABCOffset)
 {
     Bool Compressed;
@@ -147,15 +147,23 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset, Bool Extr
 	return FALSE;
     }
 
+    /* now the individual modules */
+    abc = (struct abc *) (BIOSImage + ABCOffset);
+
+    /* Get Date */
+    memcpy(Date, BIOSImage + BIOSLength - 11, 8);
+    Date[8] = 0;
+
+    printf("AMI95 Version\t: %.4s (%s)\n", abc->Version, Date);
+
     /* First, the boot rom */
-    if (!Extract)
-	printf("AMIBOOT ROM at 0x%05X (0x%05X)\n",
-	       AMIBOffset, BIOSLength - AMIBOffset);
-    else {
-	uint32_t RealOffset;
+    {
+	uint32_t BootOffset;
 	int fd;
 
-	RealOffset = AMIBOffset & 0xFFFF0000;
+	BootOffset = AMIBOffset & 0xFFFF0000;
+
+	printf("0x%05X (%6d bytes) -> amiboot.rom\n", BootOffset, BIOSLength - BootOffset);
 
 	fd = open("amiboot.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
@@ -164,30 +172,19 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset, Bool Extr
 	    return FALSE;
 	}
 
-	printf("Dumping amiboot.rom.\n");
-
-	write(fd, BIOSImage + RealOffset, BIOSLength - RealOffset);
+	write(fd, BIOSImage + BootOffset, BIOSLength - BootOffset);
 	close(fd);
     }
 
-    /* now the individual modules */
-    printf("AMIBIOS 95 header at 0x%05X\n", ABCOffset);
-    abc = (struct abc *) (BIOSImage + ABCOffset);
-
-    /* Get Date */
-    memcpy(Date, BIOSImage + BIOSLength - 11, 8);
-    Date[8] = 0;
-
-    printf("AMI95 Version\t: %.4s (%s)\n", abc->Version, Date);
-    printf("Packed Data\t: %X (%u bytes)\n",
-	   (uint32_t) abc->CRCLen * 8, (uint32_t) abc->CRCLen * 8);
-
+    /* now dump the individual modules */
     Offset = (abc->BeginHi << 4) + abc->BeginLo;
-    printf("Modules offset\t: 0x%05X\n", Offset);
-
-    printf("\nListing Modules:\n");
 
     for (i = 0; i < 0x80; i++) {
+	char filename[64], *ModuleName;
+	static uint8_t Multiple = 0; /* For the case of multiple 0x20 modules */
+	unsigned char *Buffer;
+	int BufferSize;
+
 	part = (struct part *) (BIOSImage + (Offset - BIOSOffset));
 
 	if (part->IsComprs == 0x80)
@@ -195,46 +192,46 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset, Bool Extr
 	else
 	    Compressed = TRUE;
 
-	if (!Extract) {
-	    if (Compressed)
-		printf("  %02i: %02X (%17.17s) 0x%05X (0x%05X -> 0x%05X)\n",
-		       i, part->PartID, AMI95ModuleNameGet(part->PartID, TRUE),
-		       Offset - BIOSOffset + 0x14, part->ROMSize, part->ExpSize);
-	    else
-		printf("  %02i: %02X (%17.17s) 0x%05X (0x%05X)\n",
-		       i, part->PartID, AMI95ModuleNameGet(part->PartID, TRUE),
-		       Offset - BIOSOffset + 0x0C, part->CSize);
-	} else {
-	    char filename[64];
-	    static uint8_t Multiple = 0; /* For the case of multiple 0x20 modules */
-	    unsigned char *Buffer;
-	    int BufferSize;
+	if (part->PartID == 0x20)
+	    sprintf(filename, "amipci_%02X_%02X.rom", Multiple++, part->PartID);
+	else
+	    sprintf(filename, "amibody_%02x.rom", part->PartID);
 
-	    if (part->PartID == 0x20)
-		sprintf(filename, "amipci_%.2X.%.2X", Multiple++, part->PartID);
-	    else
-		sprintf(filename, "amibody.%.2x", part->PartID);
+	if (Compressed)
+	    printf("0x%05X (%6d bytes)", Offset - BIOSOffset + 0x14, part->ROMSize);
+	else
+	    printf("0x%05X (%6d bytes)", Offset - BIOSOffset + 0x0C, part->CSize);
 
-	    printf("Dumping part %d to %s\n", i, filename);
+	printf(" -> %s", filename);
+	if (part->PartID != 0x20)
+	    printf("  ");
+	if (Compressed)
+	    printf(" (%5d bytes)", part->ExpSize);
+	else
+	    printf("\t\t");
 
-	    if (Compressed)
-		BufferSize = part->ExpSize;
-	    else
-		BufferSize = part->CSize;
+	ModuleName = AMI95ModuleNameGet(part->PartID);
+	if (ModuleName)
+	    printf("  \"%s\"\n", ModuleName);
+	else
+	    printf("\n");
 
-	    Buffer = MMapOutputFile(filename, BufferSize);
-	    if (!Buffer)
-		return FALSE;
+	if (Compressed)
+	    BufferSize = part->ExpSize;
+	else
+	    BufferSize = part->CSize;
 
-	    if (Compressed)
-		LH5Decode(BIOSImage + (Offset - BIOSOffset) + 0x14,
-			  part->ROMSize, Buffer, BufferSize);
-	    else
-		memcpy(Buffer, BIOSImage + (Offset - BIOSOffset) + 0x0C,
-		       BufferSize);
+	Buffer = MMapOutputFile(filename, BufferSize);
+	if (!Buffer)
+	    return FALSE;
 
-	    munmap(Buffer, BufferSize);
-	}
+	if (Compressed)
+	    LH5Decode(BIOSImage + (Offset - BIOSOffset) + 0x14, part->ROMSize,
+		      Buffer, BufferSize);
+	else
+	    memcpy(Buffer, BIOSImage + (Offset - BIOSOffset) + 0x0C, BufferSize);
+
+	munmap(Buffer, BufferSize);
 
 	if ((part->PrePartHi == 0xFFFF) || (part->PrePartLo == 0xFFFF))
 	    break;

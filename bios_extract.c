@@ -33,63 +33,6 @@ HelpPrint(char *name)
 {
     printf("Program to extract AMI Bios images (AMIBIOS '94 and '95).\n\n");
     printf("Usage: %s <action> <filename>\n", name);
-    printf("Actions:\n");
-    printf("\"l\"\tList Bios Structure.\n");
-    printf("\"x\"\tExtract Bios Modules.\n");
-    printf("\"h\"\tPrint usage information.\n");
-}
-
-static char *
-ArgumentsParse(int argc, char *argv[], Bool *Extract)
-{
-    char *FileName = NULL;
-    Bool FoundAction = FALSE;
-    int i;
-
-    *Extract = FALSE;
-
-    for (i = 1; i < argc; i++) {
-	if (!strcmp(argv[i], "h"))
-	    return NULL;
-	else if (!strcmp(argv[i], "x")) {
-	    if (!FoundAction) {
-		*Extract = TRUE;
-		FoundAction = TRUE;
-	    } else {
-		fprintf(stderr, "Error: wrong argument (%s)."
-			" Please provide only one action.\n", argv[i]);
-		return NULL;
-	    }
-	} else if (!strcmp(argv[i], "l")) {
-	    if (!FoundAction) {
-		*Extract = FALSE;
-		FoundAction = TRUE;
-	    } else {
-		fprintf(stderr, "Error: wrong argument (%s)."
-			" Please provide only one action.\n", argv[i]);
-		return NULL;
-	    }
-	} else {
-	    if (!FileName)
-		FileName = argv[i];
-	    else {
-		fprintf(stderr, "Error: wrong argument (%s)."
-			" Please provide only one filename.\n", argv[i]);
-		return NULL;
-	    }
-	}
-    }
-
-    if (!FileName) {
-	fprintf(stderr, "Error: Please provide a filename.\n");
-	return NULL;
-    }
-
-    if (!FoundAction) {
-	return NULL;
-    }
-
-    return FileName;
 }
 
 unsigned char *
@@ -137,10 +80,10 @@ static struct {
     char *String1;
     char *String2;
     Bool (*Handler) (unsigned char *Image, int ImageLength, int ImageOffset,
-		     Bool Extract, uint32_t Offset1, uint32_t Offset2);
+		     uint32_t Offset1, uint32_t Offset2);
 } BIOSIdentification[] = {
     {"AMIBOOT ROM", "AMIBIOSC", AMI95Extract},
-    //{"Phoenix FirstBIOS", "BCPSEGMENT", PhoenixExtract},
+    {"Phoenix FirstBIOS", "BCPSEGMENT", PhoenixExtract},
     {"PhoenixBIOS 4.0", "BCPSEGMENT", PhoenixExtract},
     {NULL, NULL, NULL},
 };
@@ -151,8 +94,6 @@ static struct {
 int
 main(int argc, char *argv[])
 {
-    Bool Extract = FALSE;
-    char *FileName = NULL;
     int FileLength = 0;
     uint32_t BIOSOffset = 0;
     unsigned char *BIOSImage = NULL;
@@ -161,23 +102,22 @@ main(int argc, char *argv[])
     int i, len;
     unsigned char *tmp;
 
-    FileName = ArgumentsParse(argc, argv, &Extract);
-    if (!FileName) {
+    if (argc != 2) {
 	HelpPrint(argv[0]);
 	return 1;
     }
 
-    fd = open(FileName, O_RDONLY);
+    fd = open(argv[1], O_RDONLY);
     if (fd < 0) {
 	fprintf(stderr, "Error: Failed to open %s: %s\n",
-		FileName, strerror(errno));
+		argv[1], strerror(errno));
 	return 1;
     }
 
     FileLength = lseek(fd, 0, SEEK_END);
     if (FileLength < 0) {
 	fprintf(stderr, "Error: Failed to lseek \"%s\": %s\n",
-		FileName, strerror(errno));
+		argv[1], strerror(errno));
 	return 1;
     }
     BIOSOffset = 0x100000 - FileLength;
@@ -185,11 +125,11 @@ main(int argc, char *argv[])
     BIOSImage = mmap(NULL, FileLength, PROT_READ, MAP_PRIVATE, fd, 0);
     if (BIOSImage < 0) {
 	fprintf(stderr, "Error: Failed to mmap %s: %s\n",
-		FileName, strerror(errno));
+		argv[1], strerror(errno));
 	return 1;
     }
 
-    printf("Using file \"%s\" (%ukB)\n", FileName, FileLength >> 10);
+    printf("Using file \"%s\" (%ukB)\n", argv[1], FileLength >> 10);
 
     for (i = 0; BIOSIdentification[i].Handler; i++) {
 	len = strlen(BIOSIdentification[i].String1);
@@ -204,7 +144,7 @@ main(int argc, char *argv[])
 	    continue;
 	Offset2 = tmp - BIOSImage;
 
-	if (BIOSIdentification[i].Handler(BIOSImage, FileLength, BIOSOffset, Extract,
+	if (BIOSIdentification[i].Handler(BIOSImage, FileLength, BIOSOffset,
 					  Offset1, Offset2))
 	    return 0;
 	else

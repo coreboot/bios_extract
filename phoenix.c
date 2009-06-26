@@ -182,7 +182,7 @@ PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
  */
 Bool
 PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
-	       Bool Extract, uint32_t Offset1, uint32_t BCPSegmentOffset)
+	       uint32_t Offset1, uint32_t BCPSegmentOffset)
 {
     struct PhoenixID {
 	char Name[6];
