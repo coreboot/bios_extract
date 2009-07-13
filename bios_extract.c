@@ -31,8 +31,11 @@
 static void
 HelpPrint(char *name)
 {
-    printf("Program to extract AMI Bios images (AMIBIOS '94 and '95).\n\n");
-    printf("Usage: %s <action> <filename>\n", name);
+    printf("\n");
+    printf("Program to extract compressed modules from BIOS images.\n");
+    printf("Supports AMI, Award, Asus and Phoenix BIOSes.\n");
+    printf("\n");
+    printf("Usage:\n\t%s <filename>\n", name);
 }
 
 unsigned char *
@@ -103,7 +106,7 @@ main(int argc, char *argv[])
     int i, len;
     unsigned char *tmp;
 
-    if (argc != 2) {
+    if ((argc != 2) || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")){ 
 	HelpPrint(argv[0]);
 	return 1;
     }
