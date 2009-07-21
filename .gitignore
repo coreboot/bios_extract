@@ -4,3 +4,4 @@ ami_slab
 bcpvpd
 *.o
 *~
+*.pyc
