@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <endian.h>
 
 #include "lh5_extract.h"
 
@@ -129,18 +130,18 @@ LH5HeaderParse(unsigned char *Buffer, int BufferSize,
         return 0;
     }
 
-    *packed_size = *(unsigned int *) (Buffer + 7);
-    *original_size = *(unsigned int *) (Buffer + 11);
+    *packed_size = le32toh(*(unsigned int *) (Buffer + 7));
+    *original_size = le32toh(*(unsigned int *) (Buffer + 11));
 
     name_length = Buffer[21];
     *name = strndup((char *) Buffer + 22, name_length);
 
-    *crc = *(unsigned short *) (Buffer + 22 + name_length);
+    *crc = le16toh(*(unsigned short *) (Buffer + 22 + name_length));
 
     offset = header_size + 2;
     /* Skip extended headers */
     while (1) {
-	unsigned short extend_size = *(unsigned short *) (Buffer + offset - 2);
+	unsigned short extend_size = le16toh(*(unsigned short *) (Buffer + offset - 2));
 
 	if (!extend_size)
 	    break;

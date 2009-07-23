@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <endian.h>
 
 #include "bios_extract.h"
 #include "lh5_extract.h"
@@ -108,10 +109,10 @@ PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	return 0;
     }
 
-    if ((Offset + Module->HeadLen + 4 + Module->Packed1) > BIOSLength) {
+    if ((Offset + Module->HeadLen + 4 + le32toh(Module->Packed1)) > BIOSLength) {
 	fprintf(stderr, "Error: Module overruns buffer at 0x%05X\n",
 		Offset);
-	return Module->Previous;
+	return le32toh(Module->Previous);
     }
 
     ModuleName = PhoenixModuleNameGet(Module->Type);
@@ -134,47 +135,47 @@ PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
     switch (Module->Compression) {
     case 5: /* LH5 */
 	printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes)", Offset + Module->HeadLen + 4,
-	       Module->Packed1, filename, Module->ExpLen1);
+	       le32toh(Module->Packed1), filename, le32toh(Module->ExpLen1));
 
-	Buffer = MMapOutputFile(filename, Module->ExpLen1);
+	Buffer = MMapOutputFile(filename, le32toh(Module->ExpLen1));
 	if (!Buffer)
 	    break;
 
 	LH5Decode(BIOSImage + Offset + Module->HeadLen + 4,
-		  Module->Packed1, Buffer, Module->ExpLen1);
+		  le32toh(Module->Packed1), Buffer, le32toh(Module->ExpLen1));
 
-	munmap(Buffer, Module->ExpLen1);
+	munmap(Buffer, le32toh(Module->ExpLen1));
 
 	break;
     /* case 3 */ /* LZSS */
     case 0: /* not compressed at all */
 	/* why do we not use the full header here? */
 	printf("0x%05X (%6d bytes)   ->   %s", Offset + Module->HeadLen,
-	       Module->Packed1, filename);
+	       le32toh(Module->Packed1), filename);
 
-	write(fd, BIOSImage + Offset + Module->HeadLen, Module->Packed1);
+	write(fd, BIOSImage + Offset + Module->HeadLen, le32toh(Module->Packed1));
 	break;
     default:
 	fprintf(stderr, "Unsupported compression type for %s: %d\n",
 		filename, Module->Compression);
 	printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes)", Offset + Module->HeadLen + 4,
-	       Module->Packed1, filename, Module->ExpLen1);
+	       le32toh(Module->Packed1), filename, le32toh(Module->ExpLen1));
 
-	write(fd, BIOSImage + Offset + Module->HeadLen + 4, Module->Packed1);
+	write(fd, BIOSImage + Offset + Module->HeadLen + 4, le32toh(Module->Packed1));
 	break;
     }
 
     close(fd);
     free(filename);
 
-    if (Module->Offset || Module->Segment) {
+    if (le16toh(Module->Offset) || le16toh(Module->Segment)) {
 	if (!Module->Compression)
 	    printf("\t\t");
-	printf("\t [0x%04X:0x%04X]\n", Module->Segment << 12, Module->Offset);
+	printf("\t [0x%04X:0x%04X]\n", le16toh(Module->Segment) << 12, le16toh(Module->Offset));
     } else
 	printf("\n");
 
-    return Module->Previous;
+    return le32toh(Module->Previous);
 }
 
 /*
@@ -195,11 +196,11 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
     for (ID = (struct PhoenixID *) (BIOSImage + BCPSegmentOffset + 10);
 	 ((void *) ID < (void *) (BIOSImage + BIOSLength)) && ID->Name[0];
-	 ID = (struct PhoenixID *) (((unsigned char *) ID) + ID->Length)) {
+	 ID = (struct PhoenixID *) (((unsigned char *) ID) + le16toh(ID->Length))) {
 #if 0
 	printf("PhoenixID: Name %c%c%c%c%c%c, Flags 0x%04X, Length %d\n",
 	       ID->Name[0],  ID->Name[1], ID->Name[2],  ID->Name[3],
-	       ID->Name[4],  ID->Name[5], ID->Flags, ID->Length);
+	       ID->Name[4],  ID->Name[5], le16toh(ID->Flags), le16toh(ID->Length));
 #endif
 	if (!strncmp(ID->Name, "BCPSYS", 6))
 	    break;
@@ -224,7 +225,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	printf("Version \"%s\", created on %s at %s.\n", Version, Date, Time);
     }
 
-    Offset = *((uint32_t *) (((char *) ID) + 0x77));
+    Offset = le32toh(*((uint32_t *) (((char *) ID) + 0x77)));
     Offset &= (BIOSLength - 1);
     if (!Offset) {
 	fprintf(stderr, "Error: retrieved invalid Modules offset.\n");
