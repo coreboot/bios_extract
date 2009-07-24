@@ -9,9 +9,15 @@ def md5sum(data):
     return md5(data).hexdigest()
 
 
-class BadPositionException(Exception):
+class FindBadPosition(Exception):
     """Raised to disallow a position from appearing in the result list in `find_all`"""
     pass
+
+
+class FindStopSearching(Exception):
+    """Stop searching in find_all"""
+    def __init__(self, result):
+        self.result = result
 
 
 def from_b64(what):
@@ -26,18 +32,47 @@ def substitute(input, where, what):
     return "".join([input[:where], what, input[where + len(what):]])
 
 
-def find_all(buffer, what, callback=lambda x: x):
+def find_all(buffer, what, callback=lambda x: x, start=0, stop=None):
+    if stop is None:
+        stop = len(buffer)
 
-    position = 0
+    position = start
     result = []
 
-    while position < len(buffer) and what in buffer[position:]:
+    while position < stop and what in buffer[position:stop + 1]:
 
-        position = buffer.index(what, position)
+        position = buffer.index(what, position, stop)
 
         try:
             result.append(callback(position))
-        except BadPositionException:
+        except FindStopSearching, exc:
+            return exc.result
+        except FindBadPosition:
+            pass
+
+        position += 1
+
+    return result
+
+
+def find_all_backwards(buffer, what, callback=lambda x: x, start=None, stop=0):
+    "Beware! This function is not fully tested. I should really write some unit tests for the edge cases"
+
+    if start is None:
+        start = len(buffer)
+
+    position = start
+    result = []
+
+    while position > stop and what in buffer[stop:position]:
+
+        position = buffer.rindex(what, stop, position)
+
+        try:
+            result.append(callback(position))
+        except FindStopSearching, exc:
+            return exc.result
+        except FindBadPosition:
             pass
 
         position += 1
@@ -123,9 +158,9 @@ def pad(s, c, l):
     return s
 
 
-def chexdump(s, ts=""):
+def chexdump(s, ts="", off=0):
     for i in range(0, len(s), 16):
-        print ts + "%08x  %s  %s  |%s|" % (i, pad(hexdump(s[i:i + 8], ' '), " ", 23), pad(hexdump(s[i + 8:i + 16], ' '), " ", 23), pad(ascii(s[i:i + 16]), " ", 16))
+        print ts + "%08x  %s  %s  |%s|" % (i + off, pad(hexdump(s[i:i + 8], ' '), " ", 23), pad(hexdump(s[i + 8:i + 16], ' '), " ", 23), pad(ascii(s[i:i + 16]), " ", 16))
 
 if __name__ == "__main__":
 
