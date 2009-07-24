@@ -141,6 +141,11 @@ def lzma_decompressed_size(buffer):
     lzmadec_info = lzmadec_info_t()
     result = lzmadec_buffer_info(pointer(lzmadec_info), buffer, len(buffer))
     assert not result, "lzmadec_buffer_info failed"
+    #print lzmadec_info
+    assert lzmadec_info.dictionary_size > lzmadec_info.uncompressed_size, (
+        "This probably doesn't make sense.."
+    )
+    #print "Here..", lzmadec_info
     return lzmadec_info.uncompressed_size
 
 
@@ -196,6 +201,7 @@ def get_lzma_chunks(input_buffer):
 
     for this_header, next_header in zip(ph, ph[1:]):
         try:
+            #print this_header, next_header
             data, length = lzma_decode(input_buffer[this_header:next_header])
         except AssertionError:
             continue
