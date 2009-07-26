@@ -84,7 +84,12 @@ class ctypes_function(object):
         f.restype, f.argtypes = self.restype, self.argtypes
         return f
 
-lzma = CDLL(find_library("lzmadec"))
+library_path = find_library("lzmadec")
+assert library_path, (
+    "Couldn't find `liblzmadec.so`. Please install lzma_utils.\n"
+    "                it can be found at http://tukaani.org/lzma/download"
+)
+lzma = CDLL(library_path)
 
 # I tried the simpler lzmadec_buffer function but it didn't like that I was
 # providing too much data and crashed, so I switched to the stream instead.
