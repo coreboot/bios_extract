@@ -27,6 +27,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <endian.h>
 
 #include "bios_extract.h"
 #include "lh5_extract.h"
@@ -177,7 +178,7 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
     }
 
     /* now dump the individual modules */
-    Offset = (abc->BeginHi << 4) + abc->BeginLo;
+    Offset = (le16toh(abc->BeginHi) << 4) + le16toh(abc->BeginLo);
 
     for (i = 0; i < 0x80; i++) {
 	char filename[64], *ModuleName;
@@ -198,15 +199,15 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	    sprintf(filename, "amibody_%02x.rom", part->PartID);
 
 	if (Compressed)
-	    printf("0x%05X (%6d bytes)", Offset - BIOSOffset + 0x14, part->ROMSize);
+	    printf("0x%05X (%6d bytes)", Offset - BIOSOffset + 0x14, le32toh(part->ROMSize));
 	else
-	    printf("0x%05X (%6d bytes)", Offset - BIOSOffset + 0x0C, part->CSize);
+	    printf("0x%05X (%6d bytes)", Offset - BIOSOffset + 0x0C, le16toh(part->CSize));
 
 	printf(" -> %s", filename);
 	if (part->PartID != 0x20)
 	    printf("  ");
 	if (Compressed)
-	    printf(" (%5d bytes)", part->ExpSize);
+	    printf(" (%5d bytes)", le32toh(part->ExpSize));
 	else
 	    printf("\t\t");
 
@@ -217,25 +218,25 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	    printf("\n");
 
 	if (Compressed)
-	    BufferSize = part->ExpSize;
+	    BufferSize = le32toh(part->ExpSize);
 	else
-	    BufferSize = part->CSize;
+	    BufferSize = le16toh(part->CSize);
 
 	Buffer = MMapOutputFile(filename, BufferSize);
 	if (!Buffer)
 	    return FALSE;
 
 	if (Compressed)
-	    LH5Decode(BIOSImage + (Offset - BIOSOffset) + 0x14, part->ROMSize,
+	    LH5Decode(BIOSImage + (Offset - BIOSOffset) + 0x14, le32toh(part->ROMSize),
 		      Buffer, BufferSize);
 	else
 	    memcpy(Buffer, BIOSImage + (Offset - BIOSOffset) + 0x0C, BufferSize);
 
 	munmap(Buffer, BufferSize);
 
-	if ((part->PrePartHi == 0xFFFF) || (part->PrePartLo == 0xFFFF))
+	if ((le16toh(part->PrePartHi) == 0xFFFF) || (le16toh(part->PrePartLo) == 0xFFFF))
 	    break;
-	Offset = (part->PrePartHi << 4) + part->PrePartLo;
+	Offset = (le16toh(part->PrePartHi) << 4) + le16toh(part->PrePartLo);
     }
 
     return TRUE;
