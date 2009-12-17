@@ -239,3 +239,16 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
     return TRUE;
 }
+
+/*
+ *
+ */
+Bool
+PhoenixTrustedExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
+	       uint32_t Offset1, uint32_t BCPSegmentOffset)
+{
+    fprintf(stderr, "ERROR: Phoenix TrustedCore images are not supported.\n");
+    printf("Feel free to RE the decompression routine :)\n");
+
+    return FALSE;
+}
