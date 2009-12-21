@@ -191,7 +191,10 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
     }
 
     /* now dump the individual modules */
-    Offset = (le16toh(abc->BeginHi) << 4) + le16toh(abc->BeginLo);
+    if (BIOSLength > 0x100000)
+	Offset = (le16toh(abc->BeginHi) << 16) + le16toh(abc->BeginLo);
+    else
+	Offset = (le16toh(abc->BeginHi) << 4) + le16toh(abc->BeginLo);
 
     for (i = 0; i < 0x80; i++) {
 	char filename[64], *ModuleName;
@@ -259,7 +262,11 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
 	if ((le16toh(part->PrePartHi) == 0xFFFF) || (le16toh(part->PrePartLo) == 0xFFFF))
 	    break;
-	Offset = (le16toh(part->PrePartHi) << 4) + le16toh(part->PrePartLo);
+
+	if (BIOSLength > 0x100000)
+	    Offset = (le16toh(part->PrePartHi) << 16) + le16toh(part->PrePartLo);
+	else
+	    Offset = (le16toh(part->PrePartHi) << 4) + le16toh(part->PrePartLo);
     }
 
     return TRUE;

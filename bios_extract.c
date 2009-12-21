@@ -87,6 +87,7 @@ static struct {
 } BIOSIdentification[] = {
     {"AMIBOOT ROM", "AMIBIOSC", AMI95Extract},
     {"$ASUSAMI$", "AMIBIOSC", AMI95Extract},
+    {"AMIEBBLK", "AMIBIOSC", AMI95Extract},
     {"Award BootBlock", "= Award Decompression Bios =", AwardExtract},
     {"Phoenix FirstBIOS", "BCPSEGMENT", PhoenixExtract},
     {"PhoenixBIOS 4.0", "BCPSEGMENT", PhoenixExtract},
@@ -126,7 +127,8 @@ main(int argc, char *argv[])
 		argv[1], strerror(errno));
 	return 1;
     }
-    BIOSOffset = 0x100000 - FileLength;
+
+    BIOSOffset = (0x100000 - FileLength) & 0xFFFFF;
 
     BIOSImage = mmap(NULL, FileLength, PROT_READ, MAP_PRIVATE, fd, 0);
     if (BIOSImage < 0) {
