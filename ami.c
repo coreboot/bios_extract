@@ -90,7 +90,15 @@ AMI95ModuleNames[] = {
     {0x38, "Lang1 as ROM"},
     {0x39, "Lang2 as ROM"},
     {0x3A, "Lang3 as ROM"},
+    {0x40, "AMD CIM-X NB binary"},
+    {0x60, "AMD CIM-X SB binary"},
     {0x70, "OSD Bitmaps"},
+    {0xf0, "Asrock Backup Util"},
+    {0xf9, "Asrock AMD AHCI DLL"},
+    {0xfa, "Asrock LOGO GIF"},
+    {0xfb, "Asrock LOGO JPG"},
+    {0xfc, "Asrock LOGO JPG"},
+    {0xfd, "Asrock LOGO PCX - Instant boot"},
     {0, NULL}
 };
 
@@ -126,6 +134,11 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	const uint16_t BeginLo;
 	const uint16_t BeginHi;
     } *abc;
+
+    struct bigpart {
+	const uint32_t CSize;
+	const uint32_t Unknown;
+    } *bigpart;
 
     struct part {
 	/* When Previous Part Address is 0xFFFFFFFF, then this is the last part. */
@@ -188,10 +201,14 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
 	part = (struct part *) (BIOSImage + (Offset - BIOSOffset));
 
-	if (part->IsComprs == 0x80)
+	if ((part->IsComprs == 0x80) || (part->IsComprs == 0x90))
 	    Compressed = FALSE;
 	else
 	    Compressed = TRUE;
+
+	/* even they claim they are compressed they arent */
+	if ((part->PartID == 0x40) || (part->PartID == 0x60))
+	    Compressed = FALSE;
 
 	if (part->PartID == 0x20)
 	    sprintf(filename, "amipci_%02X_%02X.rom", Multiple++, part->PartID);
@@ -204,6 +221,7 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	    printf("0x%05X (%6d bytes)", Offset - BIOSOffset + 0x0C, le16toh(part->CSize));
 
 	printf(" -> %s", filename);
+
 	if (part->PartID != 0x20)
 	    printf("  ");
 	if (Compressed)
@@ -221,6 +239,11 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	    BufferSize = le32toh(part->ExpSize);
 	else
 	    BufferSize = le16toh(part->CSize);
+
+	if ((BufferSize == 0xFFFF) && !Compressed)  {
+	    bigpart = (struct bigpart *) (BIOSImage + (Offset - BIOSOffset) - sizeof(struct bigpart));
+	    BufferSize = bigpart->CSize;
+	}
 
 	Buffer = MMapOutputFile(filename, BufferSize);
 	if (!Buffer)
