@@ -147,7 +147,11 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	const uint16_t CSize; /* Header length */
 	const uint8_t PartID; /* ID for this header */
 	const uint8_t IsComprs; /* 0x80 -> compressed */
-	const uint32_t RealCS; /* Real Address in RAM where to expand to */
+	const uint32_t RealCS; /* Old BIOSes: 
+	                             Real Address in RAM where to expand to
+	                          Now:
+	                             Type 0x20 PCI ID of device for this ROM
+	                             Type 0x21 Language ID (ascii) */
 	const uint32_t ROMSize; /* Compressed Length */
 	const uint32_t ExpSize; /* Expanded Length */
     } *part;
@@ -198,7 +202,6 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
     for (i = 0; i < 0x80; i++) {
 	char filename[64], *ModuleName;
-	static uint8_t Multiple = 0; /* For the case of multiple 0x20 modules */
 	unsigned char *Buffer;
 	int BufferSize;
 
@@ -213,9 +216,14 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	if ((part->PartID == 0x40) || (part->PartID == 0x60))
 	    Compressed = FALSE;
 
-	if (part->PartID == 0x20)
-	    sprintf(filename, "amipci_%02X_%02X.rom", Multiple++, part->PartID);
-	else
+	if (part->PartID == 0x20) {
+	    uint16_t vid = le32toh(part->RealCS) & 0xFFFF;
+	    uint16_t pid = le32toh(part->RealCS) >> 16;
+	    sprintf(filename, "amipci_%04X_%04X.rom", vid, pid);
+        } else if (part->PartID == 0x21) {
+            sprintf(filename, "amilang_%c%c.rom", (le32toh(part->RealCS) >> 8) & 0xFF,
+                                                   le32toh(part->RealCS) & 0xFF);
+        } else
 	    sprintf(filename, "amibody_%02x.rom", part->PartID);
 
 	if (Compressed)
@@ -223,14 +231,12 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	else
 	    printf("0x%05X (%6d bytes)", Offset - BIOSOffset + 0x0C, le16toh(part->CSize));
 
-	printf(" -> %s", filename);
+	printf(" -> %-20s", filename);
 
-	if (part->PartID != 0x20)
-	    printf("  ");
 	if (Compressed)
-	    printf(" (%5d bytes)", le32toh(part->ExpSize));
+	    printf(" (%6d bytes)", le32toh(part->ExpSize));
 	else
-	    printf("\t\t");
+	    printf("               ");
 
 	ModuleName = AMI95ModuleNameGet(part->PartID);
 	if (ModuleName)
