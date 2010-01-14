@@ -2,7 +2,7 @@ MAKE = make
 CFLAGS = -g -fpack-struct -Wall -O0
 CC = gcc
 
-all: bios_extract bcpvpd
+all: bios_extract bcpvpd ami_slab
 
 BIOS_EXTRACT_OBJS = lh5_extract.o ami.o award.o phoenix.o bios_extract.o
 bios_extract: $(BIOS_EXTRACT_OBJS)
@@ -11,6 +11,10 @@ bios_extract: $(BIOS_EXTRACT_OBJS)
 BCPVPD_OBJS = lzss_extract.o bcpvpd.o
 bcpvpd: $(BCPVPD_OBJS)
 	$(CC) $(CFLAGS) $(BCPVPD_OBJS) -o bcpvpd
+
+AMISLAB_OBJS = ami_slab.o
+ami_slab: $(AMISLAB_OBJS)
+	$(CC) $(CFLAGS) $(AMISLAB_OBJS) -o ami_slab
 
 # just here to easily verify the functionality of the lh5 routine
 LH5_TEST_OBJS = lh5_extract.o lh5_test.o
@@ -22,3 +26,4 @@ clean:
 	rm -f bios_extract
 	rm -f bcpvpd
 	rm -f lh5_test
+	rm -f ami_slab
