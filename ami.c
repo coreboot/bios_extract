@@ -207,7 +207,7 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
 	part = (struct part *) (BIOSImage + (Offset - BIOSOffset));
 
-	if ((part->IsComprs == 0x80) || (part->IsComprs == 0x90))
+	if (part->IsComprs & 0x80)
 	    Compressed = FALSE;
 	else
 	    Compressed = TRUE;
