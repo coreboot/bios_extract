@@ -3,6 +3,11 @@ bios_extract:
 Tool to extract the different submodules of common legacy bioses. Currently
 only supports AMI95 bioses.
 
+ami_slab:
+---------
+Tool to extract the different submodules of an AMI SLAB (Single Link Arch BIOS)
+module from an AMI BIOS.
+
 bcpvpd:
 -------
 Extracts IBM compressed BIOS images (BCPVPD and $IBMCOMP) so that bios_extract
