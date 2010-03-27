@@ -203,7 +203,7 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
     for (i = 0; i < 0x80; i++) {
 	char filename[64], *ModuleName;
 	unsigned char *Buffer;
-	int BufferSize;
+	int BufferSize, ROMSize;
 
 	part = (struct part *) (BIOSImage + (Offset - BIOSOffset));
 
@@ -226,15 +226,27 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
         } else
 	    sprintf(filename, "amibody_%02x.rom", part->PartID);
 
+	if (Compressed) {
+	    ROMSize = le32toh(part->ROMSize);
+	    BufferSize = le32toh(part->ExpSize);
+	} else {
+	    BufferSize = le16toh(part->CSize);
+	    if (!BufferSize || (BufferSize == 0xFFFF)) {
+		bigpart = (struct bigpart *) (BIOSImage + (Offset - BIOSOffset) - sizeof(struct bigpart));
+		BufferSize = le32toh(bigpart->CSize);
+	    }
+	    ROMSize = BufferSize;
+	}
+
 	if (Compressed)
-	    printf("0x%05X (%6d bytes)", Offset - BIOSOffset + 0x14, le32toh(part->ROMSize));
+	    printf("0x%05X (%6d bytes)", Offset - BIOSOffset + 0x14, ROMSize);
 	else
-	    printf("0x%05X (%6d bytes)", Offset - BIOSOffset + 0x0C, le16toh(part->CSize));
+	    printf("0x%05X (%6d bytes)", Offset - BIOSOffset + 0x0C, ROMSize);
 
 	printf(" -> %-20s", filename);
 
 	if (Compressed)
-	    printf(" (%6d bytes)", le32toh(part->ExpSize));
+	    printf(" (%6d bytes)", BufferSize);
 	else
 	    printf("               ");
 
@@ -244,23 +256,12 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	else
 	    printf("\n");
 
-	if (Compressed)
-	    BufferSize = le32toh(part->ExpSize);
-	else
-	    BufferSize = le16toh(part->CSize);
-
-	if (((BufferSize == 0xFFFF) || !BufferSize) && !Compressed)  {
-	    bigpart = (struct bigpart *) (BIOSImage + (Offset - BIOSOffset) - sizeof(struct bigpart));
-	    BufferSize = bigpart->CSize;
-	}
-
 	Buffer = MMapOutputFile(filename, BufferSize);
 	if (!Buffer)
 	    return FALSE;
 
 	if (Compressed)
-	    LH5Decode(BIOSImage + (Offset - BIOSOffset) + 0x14, le32toh(part->ROMSize),
-		      Buffer, BufferSize);
+	    LH5Decode(BIOSImage + (Offset - BIOSOffset) + 0x14, ROMSize, Buffer, BufferSize);
 	else
 	    memcpy(Buffer, BIOSImage + (Offset - BIOSOffset) + 0x0C, BufferSize);
 
