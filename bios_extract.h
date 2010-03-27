@@ -23,6 +23,17 @@
 #define FALSE 0
 #define TRUE  1
 
+#if !defined(le32toh) || !defined(le16toh)
+#if BYTE_ORDER == LITTLE_ENDIAN
+#define le32toh(x) (x)
+#define le16toh(x) (x)
+#else
+#include <byteswap.h>
+#define le32toh(x) bswap_32(x)
+#define le16toh(x) bswap_16(x)
+#endif
+#endif
+
 /* bios_extract.c */
 unsigned char *MMapOutputFile(char *filename, int size);
 
