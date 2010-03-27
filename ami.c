@@ -249,7 +249,7 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	else
 	    BufferSize = le16toh(part->CSize);
 
-	if ((BufferSize == 0xFFFF) && !Compressed)  {
+	if (((BufferSize == 0xFFFF) || !BufferSize) && !Compressed)  {
 	    bigpart = (struct bigpart *) (BIOSImage + (Offset - BIOSOffset) - sizeof(struct bigpart));
 	    BufferSize = bigpart->CSize;
 	}
