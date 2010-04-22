@@ -106,7 +106,8 @@ int slabextract(const unsigned char *buffer, int bufferlen)
                has_data ? "yes" : "no");
 
         if (has_data) {
-            int outfd = open(filename, O_WRONLY | O_CREAT | O_TRUNC);
+            int outfd = open(filename, O_WRONLY | O_CREAT | O_TRUNC,
+			     S_IRUSR | S_IWUSR);
             if (outfd != -1) {
                 if (write(outfd, datapointer, len) != len)
                     fprintf(stderr, "Can't write %s: %s\n", filename,
