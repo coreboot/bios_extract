@@ -26,7 +26,6 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
-#include <endian.h>
 
 #include "bios_extract.h"
 #include "lh5_extract.h"

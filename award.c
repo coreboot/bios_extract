@@ -23,6 +23,7 @@
 #include <string.h>
 #include <sys/mman.h>
 
+#include "compat.h"
 #include "bios_extract.h"
 #include "lh5_extract.h"
 

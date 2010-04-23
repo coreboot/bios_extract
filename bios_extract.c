@@ -25,7 +25,7 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
-
+#include "compat.h"
 #include "bios_extract.h"
 
 static void

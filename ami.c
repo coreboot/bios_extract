@@ -27,7 +27,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <endian.h>
 
 #include "bios_extract.h"
 #include "lh5_extract.h"

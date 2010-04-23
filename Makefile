@@ -4,7 +4,7 @@ CC = gcc
 
 all: bios_extract bcpvpd ami_slab
 
-BIOS_EXTRACT_OBJS = lh5_extract.o ami.o award.o phoenix.o bios_extract.o
+BIOS_EXTRACT_OBJS = lh5_extract.o ami.o award.o phoenix.o bios_extract.o compat.o
 bios_extract: $(BIOS_EXTRACT_OBJS)
 	$(CC) $(CFLAGS) $(BIOS_EXTRACT_OBJS) -o bios_extract
 
