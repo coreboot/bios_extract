@@ -1,5 +1,5 @@
 MAKE = make
-CFLAGS = -g -fpack-struct -Wall -O0
+CFLAGS ?= -g -fpack-struct -Wall -O0
 CC = gcc
 
 all: bios_extract bcpvpd ami_slab
