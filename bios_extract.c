@@ -91,6 +91,7 @@ static struct {
     {"Award BootBlock", "= Award Decompression Bios =", AwardExtract},
     {"Phoenix FirstBIOS", "BCPSEGMENT", PhoenixExtract},
     {"PhoenixBIOS 4.0", "BCPSEGMENT", PhoenixExtract},
+    {"Phoenix ServerBIOS 3", "BCPSEGMENT", PhoenixExtract},
     {"Phoenix TrustedCore", "BCPSEGMENT", PhoenixTrustedExtract},
     {NULL, NULL, NULL},
 };
