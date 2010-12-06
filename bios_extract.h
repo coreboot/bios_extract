@@ -44,9 +44,7 @@ Bool AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 /* phoenix.c */
 Bool PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		    uint32_t Offset1, uint32_t Offset2);
-Bool PhoenixTrustedExtract(unsigned char *BIOSImage, int BIOSLength,
-			   int BIOSOffset, uint32_t Offset1,
-			   uint32_t BCPSegmentOffset);
+
 /* award.c */
 Bool AwardExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		  uint32_t Offset1, uint32_t Offset2);

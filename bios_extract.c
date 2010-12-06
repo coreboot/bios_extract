@@ -92,7 +92,7 @@ static struct {
     {"Phoenix FirstBIOS", "BCPSEGMENT", PhoenixExtract},
     {"PhoenixBIOS 4.0", "BCPSEGMENT", PhoenixExtract},
     {"Phoenix ServerBIOS 3", "BCPSEGMENT", PhoenixExtract},
-    {"Phoenix TrustedCore", "BCPSEGMENT", PhoenixTrustedExtract},
+    {"Phoenix TrustedCore", "BCPSEGMENT", PhoenixExtract},
     {NULL, NULL, NULL},
 };
 
