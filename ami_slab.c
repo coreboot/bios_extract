@@ -58,14 +58,18 @@ int slabextract(const unsigned char *buffer, int bufferlen)
     const struct slabheader *h = (const void *) buffer;
     const unsigned char *listpointer;
     const unsigned char *datapointer;
-    int i, count;
+    int i, count, headersize;
 
-
+    headersize = le16toh(h->headersize);
     count = le16toh(h->entries);
+    if ((headersize < ((count * 8) + 4)) || (bufferlen < headersize)) {
+	fprintf(stderr, "Invalid file header - probably not a SLAB file\n");
+	return 1;
+    }
     printf("%d entries\n", count);
 
     /* FIXME: Is the 37 really constant? */
-    if (8 * count + 37 < le32toh(h->headersize)) {
+    if (((8 * count) + 37) < headersize) {
         listpointer = buffer + 8 * count + 37;
         printf("Name            Tp ");
     } else {
@@ -106,19 +110,33 @@ int slabextract(const unsigned char *buffer, int bufferlen)
                has_data ? "yes" : "no");
 
         if (has_data) {
-            int outfd = open(filename, O_WRONLY | O_CREAT | O_TRUNC,
-			     S_IRUSR | S_IWUSR);
+	    int outfd;
+
+	    if (datapointer + len > buffer + bufferlen) {
+		fprintf(stderr, "Not enough data. File truncated?\n");
+		return 1;
+	    }
+	    outfd = open(filename, O_WRONLY | O_CREAT | O_TRUNC,
+			 S_IRUSR | S_IWUSR);
             if (outfd != -1) {
-                if (write(outfd, datapointer, len) != len)
-                    fprintf(stderr, "Can't write %s: %s\n", filename,
+		int ret = write(outfd, datapointer, len);
+		if (ret == -1)
+		    fprintf(stderr, "Can't write %s: %s\n", filename,
 			    strerror(errno));
-                close(outfd);
+		else if (ret < len)
+		    fprintf(stderr, "Can't write %s completely: Disk full?\n",
+			    filename);
+		close(outfd);
             } else
                 fprintf(stderr, "Can't create output file %s: %s\n", filename,
 			strerror(errno));
             datapointer += len;
         }
     }
+
+    if (datapointer != buffer + bufferlen)
+	fprintf(stderr, "Warning: Unexpected %d trailing bytes",
+		(int)(buffer + bufferlen - datapointer));
 
     return 0;
 }
@@ -155,7 +173,9 @@ int main(int argc, char *argv[])
 	return 1;
     }
 
-    if (InputBufferSize < 0x52) { /* probably incorrect */
+    /* fixed header size - everything else is checked dynamically in
+       slabextract */
+    if (InputBufferSize < 4) {
 	fprintf(stderr, "Error: \"%s\" is too small to be a SLAB file.\n",
 		argv[1]);
 	return 1;
