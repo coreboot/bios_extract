@@ -42,7 +42,14 @@ unsigned char *
 MMapOutputFile(char *filename, int size)
 {
     unsigned char* Buffer;
+    char *tmp;
     int fd;
+
+    /* all slash signs '/' in filenames will be replaced by a
+       backslash sign '\' */
+    tmp = filename;
+    while ((tmp = strchr(tmp, '/')) != NULL)
+	tmp[0] = '\\';
 
     fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
     if (fd < 0) {
@@ -110,7 +117,7 @@ main(int argc, char *argv[])
     int i, len;
     unsigned char *tmp;
 
-    if ((argc != 2) || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")){ 
+    if ((argc != 2) || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")){
 	HelpPrint(argv[0]);
 	return 1;
     }
