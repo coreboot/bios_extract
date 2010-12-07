@@ -90,13 +90,14 @@ PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	uint8_t Compression;
 	uint16_t Offset;
 	uint16_t Segment;
-	uint32_t ExpLen1;
-	uint32_t Packed1;
-	uint32_t Packed2;
-	uint32_t ExpLen2;
+	uint32_t ExpLen;
+	uint32_t FragLength;
+	uint32_t NextFrag;
     } *Module;
     char *filename, *ModuleName;
     unsigned char *Buffer;
+    unsigned char *ModuleData;
+    uint32_t Packed;
     int fd;
 
     Module = (struct PhoenixModule *) (BIOSImage + Offset);
@@ -108,10 +109,64 @@ PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	return 0;
     }
 
-    if ((Offset + Module->HeadLen + 4 + le32toh(Module->Packed1)) > BIOSLength) {
+    if ((Offset + Module->HeadLen + 4 + le32toh(Module->FragLength)) > BIOSLength) {
 	fprintf(stderr, "Error: Module overruns buffer at 0x%05X\n",
 		Offset);
 	return le32toh(Module->Previous);
+    }
+
+    /* NextFrag is either the unpacked length again *or* the virtual address
+       of the next fragment. As long as BIOSses stay below 256MB, this works */
+    if ((le32toh(Module->NextFrag) & 0xF0000000) == 0xF0000000) {
+	struct PhoenixFragment {
+	    uint32_t NextFrag;
+	    uint8_t NextBank;
+	    uint32_t FragLength;
+	} *Fragment;
+	int FragOffset;
+	uint32_t FragLength = le32toh(Module->FragLength);
+
+	if (FragLength > le32toh(Module->ExpLen)) {
+	    fprintf(stderr, "Error: First fragment exceeds total size at"
+		    " %05X\n", Offset);
+	    return le32toh(Module->Previous);
+	}
+
+	/* This over-allocates, but the total compressed size is not available
+	   here */
+	ModuleData = malloc(le32toh(Module->ExpLen));
+	if (!ModuleData) {
+	    fprintf(stderr, "Error: Can't reassemble fragments,"
+		    " no memory for %d bytes\n", le32toh(Module->ExpLen));
+	    return le32toh(Module->Previous);
+	}
+
+	memcpy(ModuleData, BIOSImage + Offset + Module->HeadLen, FragLength);
+
+	Packed = FragLength;
+	FragOffset = le32toh(Module->NextFrag) & (BIOSLength - 1);
+
+	printf("extra fragments: ");
+	while(FragOffset) {
+	    Fragment = (struct PhoenixFragment *) (BIOSImage + FragOffset);
+	    FragLength = le32toh(Fragment->FragLength);
+	    printf("(%05X, %d bytes) ", FragOffset, FragLength);
+
+	    if (Packed + FragLength > le32toh(Module->ExpLen)) {
+		fprintf(stderr, "\nFragment too big at %05X for %05X\n",
+			FragOffset, Offset);
+		free(ModuleData);
+		return le32toh(Module->Previous);
+	    }
+	    memcpy(ModuleData + Packed, BIOSImage + FragOffset + 9, FragLength);
+
+	    Packed += FragLength;
+	    FragOffset = le32toh(Fragment->NextFrag) & (BIOSLength - 1);
+	}
+	printf("\n");
+    } else {
+	ModuleData = BIOSImage + Offset + Module->HeadLen;
+	Packed = le32toh(Module->FragLength);
     }
 
     ModuleName = PhoenixModuleNameGet(Module->Type);
@@ -128,44 +183,50 @@ PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	fprintf(stderr, "Error: unable to open %s: %s\n\n",
 		filename, strerror(errno));
 	free(filename);
-	return Module->Previous;
+	if ((le32toh(Module->NextFrag) & 0xF0000000) == 0xF0000000)
+	    free(ModuleData);
+
+	return le32toh(Module->Previous);
     }
 
     switch (Module->Compression) {
     case 5: /* LH5 */
 	printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes)", Offset + Module->HeadLen + 4,
-	       le32toh(Module->Packed1), filename, le32toh(Module->ExpLen1));
+	       Packed, filename, le32toh(Module->ExpLen));
 
-	Buffer = MMapOutputFile(filename, le32toh(Module->ExpLen1));
+	Buffer = MMapOutputFile(filename, le32toh(Module->ExpLen));
 	if (!Buffer)
 	    break;
 
-	LH5Decode(BIOSImage + Offset + Module->HeadLen + 4,
-		  le32toh(Module->Packed1), Buffer, le32toh(Module->ExpLen1));
+	/* The first 4 bytes of the LH5 packing method is just the total
+	   expanded length; skip them */
+	LH5Decode(ModuleData + 4, Packed - 4,
+		  Buffer, le32toh(Module->ExpLen));
 
-	munmap(Buffer, le32toh(Module->ExpLen1));
+	munmap(Buffer, le32toh(Module->ExpLen));
 
 	break;
     /* case 3 */ /* LZSS */
     case 0: /* not compressed at all */
-	/* why do we not use the full header here? */
 	printf("0x%05X (%6d bytes)   ->   %s", Offset + Module->HeadLen,
-	       le32toh(Module->Packed1), filename);
+	       Packed, filename);
 
-	write(fd, BIOSImage + Offset + Module->HeadLen, le32toh(Module->Packed1));
+	write(fd, ModuleData, Packed);
 	break;
     default:
 	fprintf(stderr, "Unsupported compression type for %s: %d\n",
 		filename, Module->Compression);
-	printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes)", Offset + Module->HeadLen + 4,
-	       le32toh(Module->Packed1), filename, le32toh(Module->ExpLen1));
+	printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes)", Offset + Module->HeadLen,
+	       Packed, filename, le32toh(Module->ExpLen));
 
-	write(fd, BIOSImage + Offset + Module->HeadLen + 4, le32toh(Module->Packed1));
+	write(fd, ModuleData, Packed);
 	break;
     }
 
     close(fd);
     free(filename);
+    if ((le32toh(Module->NextFrag) & 0xF0000000) == 0xF0000000)
+	free(ModuleData);
 
     if (le16toh(Module->Offset) || le16toh(Module->Segment)) {
 	if (!Module->Compression)
