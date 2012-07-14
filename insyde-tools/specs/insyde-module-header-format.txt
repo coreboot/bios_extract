@@ -1,0 +1,75 @@
+Offset (h)	Length (h)	Item
+----------	----------	----
+0 		10		GUID - [EFI_GUID]
+10 		1		Header checksum (2's complement sum of first 17h bytes - assume extra checksum is 0)	  	    \  [EFI_FFS_INTEGRITY_CHECK]
+11		1		Module checksum (2's complement sum of bytes from 18h to end of module (excluding any FFh padding)) /
+12		1		Type of module - [EFI_FV_FILETYPE]
+13              1        	Module attributes - [EFI_FFS_FILE_ATTRIBUTES]
+14		3		Size of header and module (excluding FFh padding at end, but including 00h padding) - [Size]
+17		1		State - [EFI_FFS_FILE_STATE] - only ever seen F8h
+
+Common header
+
+18		3		Size of extended header and module (from 18h in header, excluding FFh padding, but including 00h padding)
+1b		1		Type byte / Extended header byte
+				- if 1,10h-1Bh then module follows directly
+				- if 2 then extended header
+Extended header
+
+1c		10		GUID (? always FC1BCDB0-7D31-49AA-936A-A4600D9DD083)
+2c              2               Data offset (from common header - normally 1Ch)
+2e		2		Attributes (1 = Processing required, 2 = Status valid)
+30		4		CRC32 of module (including last 4 bytes of header, excluding FFh padding, including 00h padding)
+
+Next common header
+
+34		3		Module size (including these 4 bytes, excluding ALL padding)
+37		1		Type byte
+
+				All modules are padded 00h/FFh to QWORD boundry
+
+Type
+EFI_FV_FILETYPE_ALL 0x00
+EFI_FV_FILETYPE_RAW 0x01
+EFI_FV_FILETYPE_FREEFORM 0x02
+EFI_FV_FILETYPE_SECURITY_CORE 0x03
+EFI_FV_FILETYPE_PEI_CORE 0x04
+EFI_FV_FILETYPE_DXE_CORE 0x05
+EFI_FV_FILETYPE_PEIM 0x06
+EFI_FV_FILETYPE_DRIVER 0x07
+EFI_FV_FILETYPE_COMBINED_PEIM_DRIVER 0x08
+EFI_FV_FILETYPE_APPLICATION 0x09
+
+Attributes
+00000001 - Tail present
+00000010 - Needed for crisis recovery
+00000100 - Reserved (0)
+00111000 - Alignment (000 - 111)
+01000000 - If set, module checksum present
+
+State
+00000001 - EFI_FILE_HEADER_CONSTRUCTION
+00000010 - EFI_FILE_HEADER_VALID
+00000100 - EFI_FILE_DATA_VALID
+00001000 - EFI_FILE_MARKED_FOR_UPDATE
+00010000 - EFI_FILE_DELETED
+00100000 - EFI_FILE_HEADER_INVALID
+11000000 - ? Always 11
+
+Type of region
+EFI_SECTION_COMPRESSION 0x01 (not compressed in most insyde)
+EFI_SECTION_GUID_DEFINED 0x02
+EFI_SECTION_PE32 0x10
+EFI_SECTION_PIC 0x11
+EFI_SECTION_TE 0x12
+EFI_SECTION_DXE_DEPEX 0x13
+EFI_SECTION_VERSION 0x14
+EFI_SECTION_USER_INTERFACE 0x15
+EFI_SECTION_COMPATIBILITY16 0x16
+EFI_SECTION_FIRMWARE_VOLUME_IMAGE 0x17
+EFI_SECTION_FREEFORM_SUBTYPE_GUID 0x18
+EFI_SECTION_RAW 0x19
+EFI_SECTION_PEI_DEPEX 0x1B
+
+Source: http://forums.mydigitallife.info/threads/11693-Insyde-module-headers
+
