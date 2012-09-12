@@ -78,7 +78,7 @@ struct PhoenixFFVModule {
     uint16_t Checksum;
     uint16_t LengthLo;
     uint8_t LengthHi;
-    uint8_t Compression;
+    uint8_t FileType;
     char Name[16];
 };
 
@@ -260,7 +260,7 @@ PhoenixExtractFFV(unsigned char *BIOSImage, int BIOSLength, int Offset)
     struct PhoenixFFVCompressionHeader {
 	uint16_t TotalLengthLo;
 	uint8_t TotalLengthHi;
-	uint8_t Unk1;
+	uint8_t SectionType;
 
 	uint16_t PackedLenLo;
 	uint8_t PackedLenHi;
@@ -284,15 +284,19 @@ PhoenixExtractFFV(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	return 1;
     }
 
-    Length = (le16toh(Module->LengthHi) << 16) | Module->LengthLo;
-    if ((Offset + ((le16toh(Module->LengthHi) << 16) | Module->LengthLo)) > BIOSLength) {
+    Length = ((le16toh(Module->LengthHi) << 16) | Module->LengthLo) - 1;
+    if ((Offset + Length) >= BIOSLength) {
 	fprintf(stderr, "Error: Module overruns buffer at 0x%05X\n",
 		Offset);
 	return 1;
     }
 
-    if (Module->Compression == 0xF0) {
+    if (Module->FileType == 0xF0) {
 	strcpy(Name, "GAP");
+	filename[0] = '\0';
+    }
+    else if ((uint8_t) Module->Name[8] != 0xFF) {
+	strcpy(Name, "GUID?");
 	filename[0] = '\0';
     }
     else {
@@ -301,7 +305,7 @@ PhoenixExtractFFV(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	memcpy(Name + 8, Module->Name + 9, 7);
 	Name[15] = '\0';
 
-	if (Name[0] == '_') {
+	if (Name[0] == '_' && strlen(Name) == 4) {
 	    ModuleName = PhoenixModuleNameGet(Name[1]);
 	    if (ModuleName) {
 		snprintf(filename, sizeof(filename), "%s_%c%c.rom", ModuleName, Name[2], Name[3]);
@@ -316,27 +320,44 @@ PhoenixExtractFFV(unsigned char *BIOSImage, int BIOSLength, int Offset)
     }
 
     printf("\t%-15s (%08X-%08X) %08X %02X %02X %s\n",
-	   Name, Offset, Offset + Length, Length, Module->Flags, Module->Compression, filename
+	   Name, Offset, Offset + Length, Length, Module->Flags, Module->FileType, filename
     );
 
-    switch (Module->Compression) {
+    switch (Module->FileType) {
     case 0xF0:
 	break;
 
+    case 0xD0:
+    case 0xC4:
+    case 0xC3:
+    case 0x0B:
+    case 0x09:
+    case 0x08:
+    case 0x07:
+    case 0x06:
+    case 0x05:
+    case 0x04:
+    case 0x03:
+	break;
+
     case 0x02:
-	if (Name[1] == 'G') {
+	if (Name[1] == 'G' || !*filename) {
 	    break;
 	}
 	else {
 	    CompHeader = (struct PhoenixFFVCompressionHeader *) (BIOSImage + Offset + 0x18);
 	}
 	/* some blocks have a (8 byte?) header we need to skip */
-	if (CompHeader->TotalLengthLo != Length - 0x18) {
+	if (CompHeader->TotalLengthLo != Length - 0x18 && CompHeader->Unk3) {
+	    /* FIXME more advanced parsing of sections */
 	    CompHeader = (struct PhoenixFFVCompressionHeader *)
 		((unsigned char *)CompHeader + CompHeader->TotalLengthLo);
 	}
 	PackedLen = (CompHeader->PackedLenHi << 16) | CompHeader->PackedLenLo;
 	RealLen = (CompHeader->RealLenHi << 16) | CompHeader->RealLenLo;
+	if (!RealLen) { /* FIXME temporary hack */
+	    break;
+	}
 	RealData = MMapOutputFile(filename, RealLen);
 	if (!RealData) {
 	    fprintf(stderr, "Failed to mmap file for uncompressed data.\n");
@@ -348,6 +369,9 @@ PhoenixExtractFFV(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	break;
 
     case 0x01:
+	if (!*filename) { /* FIXME temporary hack */
+	    break;
+	}
 	fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
 	    fprintf(stderr, "Error: unable to open %s: %s\n\n", filename, strerror(errno));
@@ -358,17 +382,81 @@ PhoenixExtractFFV(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	break;
 
     default:
-	fprintf(stderr, "\t\tUnsupported compression type!\n");
+	fprintf(stderr, "\t\tUnsupported file type!\n");
 	break;
     }
 
     return Length;
 }
 
+/* Parse initial volumedir layout:
+ * - 1 byte Type indicates either raw code or an FFV module
+ * - 4 byte Base provides the offset into the image to find the specified volume
+ * - 4 byte Length
+ */
 void
-PhoenixFFVDirectory(unsigned char *BIOSImage, int BIOSLength, int Offset)
+PhoenixVolume1(unsigned char *BIOSImage, int BIOSLength, int Offset, int ModLen)
 {
     struct PhoenixVolumeDirEntry {
+	uint8_t Type;
+	uint32_t Base;
+	uint32_t Length;
+    } *Modules;
+    char Name[16];
+    int fd, HoleNum = 0;
+    uint8_t Type;
+    uint32_t Base, Length, NumModules, ModNum;
+
+    Modules = (struct PhoenixVolumeDirEntry *) (BIOSImage + Offset + 0x18);
+    NumModules = (ModLen - 0x18) / sizeof(struct PhoenixVolumeDirEntry);
+
+    printf("FFV modules: %u\n", NumModules);
+
+    for (ModNum = 0; ModNum < NumModules; ModNum++)
+    {
+	Type = Modules[ModNum].Type;
+	Base = Modules[ModNum].Base & (BIOSLength - 1);
+	Length = Modules[ModNum].Length - 1;
+	printf("[%2u]: (%08X-%08X) %02x\n",
+		ModNum, Base, Base + Length, Type
+	);
+
+	switch(Type) {
+	case 0x01:
+	    printf("\tHole (raw code)\n");
+	    snprintf(Name, sizeof(Name), "hole_%02x.bin", HoleNum++);
+	    fd = open(Name, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+	    if (fd < 0) {
+		fprintf(stderr, "Error: unable to open %s: %s\n\n", Name, strerror(errno));
+		continue;
+	    }
+	    write(fd, BIOSImage + Base, Length);
+	    close(fd);
+	    break;
+
+	case 0x02:
+	    /* FFV modules */
+	    Offset = Base;
+	    while (Offset < Base + Length) {
+		Offset += PhoenixExtractFFV(BIOSImage, BIOSLength, Offset);
+	    }
+	    break;
+	}
+    }
+}
+
+/* Parse GUID-based volumedir layout:
+ * - 4 bytes of unknown data
+ * - 4 byte Length
+ * - array of module entries:
+ *   - 16 byte GUID indicating module type
+ *   - 4 byte Base
+ *   - 4 byte Length
+ */
+void
+PhoenixVolume2(unsigned char *BIOSImage, int BIOSLength, int Offset)
+{
+    struct PhoenixVolumeDirEntry2 {
 	/* these are stored little endian */
 	uint32_t guid1;
 	uint16_t guid2;
@@ -382,43 +470,19 @@ PhoenixFFVDirectory(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	uint32_t Base;
 	uint32_t Length;
     };
-    struct PhoenixVolumeDir {
+    struct PhoenixVolumeDir2 {
 	uint16_t Unk1;
 	uint16_t Unk2;
 	uint32_t Length;
-	struct PhoenixVolumeDirEntry Modules[];
+	struct PhoenixVolumeDirEntry2 Modules[];
     } *Volume;
-    struct PhoenixFFVModule *Module;
     char Name[16], guid[37];
     int fd, HoleNum = 0;
     uint32_t Base, Length, NumModules, ModNum;
 
-    Module = (struct PhoenixFFVModule *) (BIOSImage + Offset);
-    Volume = (struct PhoenixVolumeDir *) (BIOSImage + Offset + 0x18);
+    Volume = (struct PhoenixVolumeDir2 *) (BIOSImage + Offset + 0x18);
+    NumModules = (Volume->Length - 8) / sizeof(struct PhoenixVolumeDirEntry2);
 
-    if (Module->Signature != 0xF8) {
-	fprintf(stderr, "Error: Invalid module signature at 0x%05X\n",
-		Offset);
-	return;
-    }
-
-    Length = (le16toh(Module->LengthHi) << 16) | Module->LengthLo;
-    if ((Offset + Length) > BIOSLength) {
-	fprintf(stderr, "Error: Module overruns buffer at 0x%05X\n",
-		Offset);
-	return;
-    }
-
-    /* get rid of the pesky 0xFF in the middle of the name */
-    memcpy(Name, Module->Name, 8);
-    memcpy(Name + 8, Module->Name + 9, 7);
-    Name[15] = '\0';
-    if (strcmp(Name, "volumedir.bin2")) {
-	fprintf(stderr, "FFV points to something other than volumedir.bin2: %s\n", Name);
-	return;
-    }
-
-    NumModules = (Volume->Length - 8) / sizeof(struct PhoenixVolumeDirEntry);
     printf("FFV modules: %u\n", NumModules);
 
     for (ModNum = 0; ModNum < NumModules; ModNum++)
@@ -432,7 +496,7 @@ PhoenixFFVDirectory(unsigned char *BIOSImage, int BIOSLength, int Offset)
 		be32toh(Volume->Modules[ModNum].guid6)
 	);
 	Base = Volume->Modules[ModNum].Base & (BIOSLength - 1);
-	Length = Volume->Modules[ModNum].Length;
+	Length = Volume->Modules[ModNum].Length - 1;
 	printf("[%2u]: (%08X-%08X) %s\n",
 		ModNum, Base, Base + Length, guid
 	);
@@ -471,8 +535,43 @@ PhoenixFFVDirectory(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	    fprintf(stderr, "\tUnknown FFV module GUID!\n");
 	}
     }
+}
 
-    return;
+void
+PhoenixFFVDirectory(unsigned char *BIOSImage, int BIOSLength, int Offset)
+{
+    char Name[16];
+    uint32_t Length;
+    struct PhoenixFFVModule *Module;
+
+    Module = (struct PhoenixFFVModule *) (BIOSImage + Offset);
+
+    if (Module->Signature != 0xF8) {
+	fprintf(stderr, "Error: Invalid module signature at 0x%05X\n",
+		Offset);
+	return;
+    }
+
+    Length = (le16toh(Module->LengthHi) << 16) | Module->LengthLo;
+    if ((Offset + Length) > BIOSLength) {
+	fprintf(stderr, "Error: Module overruns buffer at 0x%05X\n",
+		Offset);
+	return;
+    }
+
+    /* get rid of the pesky 0xFF in the middle of the name */
+    memcpy(Name, Module->Name, 8);
+    memcpy(Name + 8, Module->Name + 9, 7);
+    Name[15] = '\0';
+    if (!strcmp(Name, "volumedir.bin")) {
+	PhoenixVolume1(BIOSImage, BIOSLength, Offset, Length);
+    }
+    else if (!strcmp(Name, "volumedir.bin2")) {
+	PhoenixVolume2(BIOSImage, BIOSLength, Offset);
+    }
+    else {
+	fprintf(stderr, "FFV points to something other than the volumedir: %s\n", Name);
+    }
 }
 
 Bool
