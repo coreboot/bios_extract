@@ -21,3 +21,12 @@ verify lh5 extraction functionality. Will not be built per default.
 xfv:
 ----
 Tool to dissect EFI capsules.
+
+phoenix_extract.py:
+-------------------
+Simple python script to extract Phoenix FFV from ROM image
+
+microcode_extract.py:
+---------------------
+Simple python script to extract microcode blobs from binary BIOS image
+
