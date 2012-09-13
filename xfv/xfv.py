@@ -4,6 +4,8 @@ import sys
 import os
 from struct import unpack
 
+fvh_count = 0
+
 ### Formatting: GUIDs
 
 
@@ -44,7 +46,8 @@ def analyze_diskfile(filename):
         # EFI capsule
         (capguid, capheadsize, capflags, capimagesize, capseqno, capinstance, capsplitinfooffset, capbodyoffset, cap3offset, cap4offset, cap5offset, cap6offset, cap7offset, cap8offset) = unpack("< 16s L L L L 16s L L 6L", fvdata[0:80])
         print "EFI Capsule, %d bytes" % capimagesize
-        handle_fv(fvdata[capbodyoffset:capbodyoffset + capimagesize])
+        handle_fv(fvdata[capbodyoffset:capbodyoffset +
+                  capimagesize], format_guid(capguid))
 
     else:
         # treat as sequence of firmware volumes
@@ -58,7 +61,7 @@ def analyze_diskfile(filename):
 ### Handle a firmware volume
 
 
-def handle_fv(fvdata):
+def handle_fv(fvdata, name='default'):
 
     ### Check header
 
@@ -72,6 +75,13 @@ def handle_fv(fvdata):
     else:
         print "Size per header: 0x%X bytes" % fvlen
     offset = fvhdrlen
+
+    global fvh_count
+    #fvhdir = "fvh-%d" % fvh_count
+    fvhdir = "fvh-" + name
+    fvh_count = fvh_count + 1
+    os.mkdir(fvhdir)
+    os.chdir(fvhdir)
 
     ### Decode files
 
@@ -97,6 +107,10 @@ def handle_fv(fvdata):
         fileentrylen = filelenandstate & 0xffffff
         filestate = filelenandstate >> 24
         filelen = fileentrylen - 24
+        if fileattr & 1:
+            print "  has tail!"
+            filelen = filelen - 2
+
         fileoffset = offset + 24
         nextoffset = (offset + fileentrylen + 7) & ~7
 
@@ -118,6 +132,7 @@ def handle_fv(fvdata):
 
         offset = nextoffset
 
+    os.chdir('..')
     return fvlen
 
 ### Handle decompression of a compressed section
@@ -127,10 +142,11 @@ def decompress(compdata):
     (sectlenandtype, uncomplen, comptype) = unpack("< L L B", compdata[0:9])
     sectlen = sectlenandtype & 0xffffff
     if sectlen < len(compdata):
-        print "WARNING: Compressed section is not the only section!"
+        print "WARNING: Compressed section is not the only section! (%d/%d)" % (sectlen, len(compdata))
     if comptype == 0:
         return compdata[9:]
     elif comptype == 1:
+        print "WARNING: this code path might not work"
         f = file("_tmp_decompress", "wb")
         f.write(compdata[9:])
         f.close()
@@ -145,6 +161,20 @@ def decompress(compdata):
             print "WARNING: Decompressed data too short!"
         return decompdata
 
+    elif comptype == 2:
+        f = file("_tmp_decompress", "wb")
+        f.write(compdata[13:sectlen + 4])  # for some reason there is junk in 9:13 that I don't see in the raw files?! yuk.
+        f.close()
+
+        os.system("lzmadec <_tmp_decompress >_tmp_result")
+
+        f = file("_tmp_result", "rb")
+        decompdata = f.read()
+        f.close()
+
+        if len(decompdata) < uncomplen:
+            print "WARNING: Decompressed data too short!"
+        return decompdata
     else:
         print "ERROR: Unknown compression type %d" % comptype
         return compdata
@@ -266,7 +296,7 @@ def handle_sections(filename, sectindex, imagedata):
 
             if secttype == 0x17:
                 print "*** Recursively analyzing the contained firmware volume..."
-                handle_fv(sectdata)
+                handle_fv(sectdata, filename)
 
             sectindex += 1
 
@@ -281,6 +311,6 @@ if __name__ == '__main__':
         for filename in sys.argv[1:]:
             analyze_diskfile(filename)
     else:
-        analyze_diskfile("firmware-IM41.fd")
+        print "No file specified, giving up"
 
 # EOF
