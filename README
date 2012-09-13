@@ -17,3 +17,7 @@ lh5_test:
 ---------
 Sample program left over from development, but kept to be able to easily
 verify lh5 extraction functionality. Will not be built per default.
+
+xfv:
+----
+Tool to dissect EFI capsules.
