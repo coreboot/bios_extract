@@ -271,9 +271,9 @@ Returns:
     Weight[Index] = (UINT16) (1U << (TableBits - Index));
   }
 
-  while (Index <= 16) {
-    Weight[Index++] = (UINT16) (1U << (16 - Index));
-  }
+  for (; Index <= 16; Index++) {
+    Weight[Index] = (UINT16) (1U << (16 - Index));
+ }
 
   Index = (UINT16) (Start[TableBits + 1] >> JuBits);
 
@@ -595,7 +595,7 @@ Returns:
     // Starting a new block
     //
     Sd->mBlockSize    = (UINT16) GetBits (Sd, 16);
-    Sd->mBadTableFlag = ReadPTLen (Sd, NT, TBIT, 3);
+    Sd->mBadTableFlag = ReadPTLen (Sd, NT, TBIT, 3); // there be segfaulting dragons
     if (Sd->mBadTableFlag != 0) {
       return 0;
     }
