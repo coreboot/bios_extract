@@ -4,6 +4,7 @@ import sys
 import os
 from struct import unpack
 
+efidecomp_path = os.path.dirname(os.path.realpath(__file__)) + "/efidecomp"
 fvh_count = 0
 
 ### Formatting: GUIDs
@@ -151,7 +152,7 @@ def decompress(compdata):
         f.write(compdata[9:])
         f.close()
 
-        os.system("./efidecomp <_tmp_decompress >_tmp_result")
+        os.system("%s <_tmp_decompress >_tmp_result" % efidecomp_path)
 
         f = file("_tmp_result", "rb")
         decompdata = f.read()
@@ -307,10 +308,12 @@ def handle_sections(filename, sectindex, imagedata):
 ### main code
 
 if __name__ == '__main__':
+    if not (os.path.isfile(efidecomp_path) and os.access(efidecomp_path, os.X_OK)):
+        print "ERROR: %s is not executable!" % efidecomp_path
+        exit(1)
+
     if len(sys.argv) > 1:
         for filename in sys.argv[1:]:
             analyze_diskfile(filename)
     else:
         print "No file specified, giving up"
-
-# EOF
