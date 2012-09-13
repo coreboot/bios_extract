@@ -33,14 +33,32 @@ def extention_filetype(filetype_num):
 ### Main function to analyze a host disk file
 
 
-def analyze_file(filename):
+def analyze_diskfile(filename):
     f = file(filename, "rb")
     fvdata = f.read()
     f.close()
 
     print "Analyzing %s, 0x%X bytes" % (filename, len(fvdata))
 
-    # TODO: refactor this so that multiple volumes in a single firmware image are handled
+    if fvdata[0:16] == "\xBD\x86\x66\x3B\x76\x0D\x30\x40\xB7\x0E\xB5\x51\x9E\x2F\xC5\xA0":
+        # EFI capsule
+        (capguid, capheadsize, capflags, capimagesize, capseqno, capinstance, capsplitinfooffset, capbodyoffset, cap3offset, cap4offset, cap5offset, cap6offset, cap7offset, cap8offset) = unpack("< 16s L L L L 16s L L 6L", fvdata[0:80])
+        print "EFI Capsule, %d bytes" % capimagesize
+        handle_fv(fvdata[capbodyoffset:capbodyoffset + capimagesize])
+
+    else:
+        # treat as sequence of firmware volumes
+        while True:
+            usedsize = handle_fv(fvdata)
+            if usedsize >= len(fvdata):
+                break
+            else:
+                fvdata = fvdata[usedsize:]
+
+### Handle a firmware volume
+
+
+def handle_fv(fvdata):
 
     ### Check header
 
@@ -48,7 +66,7 @@ def analyze_file(filename):
      fvrev) = unpack("< 16s 16s Q 4s L H H 3x B", fvdata[0:0x38])
     if fvsig != "_FVH":
         print "Not a EFI firmware volume (sig missing)"
-        return
+        return 0
     if fvlen > len(fvdata):
         print "WARNING: File too short, header gives length as 0x%X bytes" % fvlen
     else:
@@ -99,6 +117,8 @@ def analyze_file(filename):
             fileguid), extention_filetype(filetype)), filetype, filedata)
 
         offset = nextoffset
+
+    return fvlen
 
 ### Handle decompression of a compressed section
 
@@ -185,9 +205,10 @@ def handle_sections(filename, sectindex, imagedata):
                 sectindex = handle_sections(filename, sectindex, imagedata[
                                             dataoffset:dataoffset + datalen])
             else:
-                print "  %02d GUID %s" % (sectindex, format_guid(sectguid))
+                print "  %02d  GUID %s" % (sectindex, format_guid(sectguid))
                 sectindex += 1
-                # TODO: write this to disk?
+                sectindex = handle_sections(filename, sectindex, imagedata[
+                                            dataoffset:dataoffset + datalen])
         else:
             secttype_name = "UNKNOWN(%02X)" % secttype
             ext = "data"
@@ -243,6 +264,10 @@ def handle_sections(filename, sectindex, imagedata):
                 f.write(sectdata)
                 f.close()
 
+            if secttype == 0x17:
+                print "*** Recursively analyzing the contained firmware volume..."
+                handle_fv(sectdata)
+
             sectindex += 1
 
         offset = nextoffset
@@ -254,8 +279,8 @@ def handle_sections(filename, sectindex, imagedata):
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         for filename in sys.argv[1:]:
-            analyze_file(filename)
+            analyze_diskfile(filename)
     else:
-        analyze_file("firmware-IM41.fd")
+        analyze_diskfile("firmware-IM41.fd")
 
 # EOF
