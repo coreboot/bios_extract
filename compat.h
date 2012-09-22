@@ -25,10 +25,13 @@ char *strndup(const char *s, size_t n);
 #endif
 
 // "endian.h" does not exist on (at least) these platforms:
-// FreeBSD, NetBSD, OSF/Tru64, HP-UX 10, Solaris, A/UX, Ultrix and
-// AIX. It exists on Linux and Irix
+// NetBSD, OSF/Tru64, HP-UX 10, Solaris, A/UX, Ultrix and
+// AIX. It exists on FreeBSD, Linux and Irix.
 #ifdef __linux__
 #include <endian.h>
+#elif __FreeBSD__
+#include <sys/endian.h>
+#include <sys/stat.h>
 #endif
 
 #if !defined(le32toh) || !defined(le16toh)

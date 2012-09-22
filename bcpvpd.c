@@ -36,6 +36,7 @@
 #include <string.h>
 #include <sys/mman.h>
 
+#include "compat.h"
 #include "lzss_extract.h"
 
 int

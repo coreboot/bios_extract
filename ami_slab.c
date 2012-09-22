@@ -22,8 +22,9 @@
 #include <errno.h>
 #include <string.h>
 #include <inttypes.h>
-#include <sys/stat.h>
 #include <sys/mman.h>
+
+#include "compat.h"
 
 #if !defined(le32toh) || !defined(le16toh)
 #if BYTE_ORDER == LITTLE_ENDIAN
