@@ -146,39 +146,28 @@ def decompress(compdata):
         print "WARNING: Compressed section is not the only section! (%d/%d)" % (sectlen, len(compdata))
     if comptype == 0:
         return compdata[9:]
-    elif comptype == 1:
-        print "WARNING: this code path might not work"
-        f = file("_tmp_decompress", "wb")
-        f.write(compdata[9:])
-        f.close()
-
-        os.system("%s <_tmp_decompress >_tmp_result" % efidecomp_path)
-
-        f = file("_tmp_result", "rb")
-        decompdata = f.read()
-        f.close()
-
-        if len(decompdata) < uncomplen:
-            print "WARNING: Decompressed data too short!"
-        return decompdata
-
-    elif comptype == 2:
-        f = file("_tmp_decompress", "wb")
-        f.write(compdata[13:sectlen + 4])  # for some reason there is junk in 9:13 that I don't see in the raw files?! yuk.
-        f.close()
-
-        os.system("lzmadec <_tmp_decompress >_tmp_result")
-
-        f = file("_tmp_result", "rb")
-        decompdata = f.read()
-        f.close()
-
-        if len(decompdata) < uncomplen:
-            print "WARNING: Decompressed data too short!"
-        return decompdata
-    else:
+    elif comptype > 2:
         print "ERROR: Unknown compression type %d" % comptype
         return compdata
+
+    print "WARNING: this code path might not work"
+    f = file("_tmp_decompress", "wb")
+    if comptype == 1:
+        f.write(compdata[9:])
+        f.close()
+        os.system("%s <_tmp_decompress >_tmp_result" % efidecomp_path)
+    else:
+        f.write(compdata[13:sectlen + 4]) # for some reason there is junk in 9:13 that I don't see in the raw files?! yuk.
+        f.close()
+        os.system("lzmadec <_tmp_decompress >_tmp_result")
+
+    f = file("_tmp_result", "rb")
+    decompdata = f.read()
+    f.close()
+
+    if len(decompdata) < uncomplen:
+        print "WARNING: Decompressed data too short!"
+    return decompdata
 
 ### Handle the contents of one firmware file
 
