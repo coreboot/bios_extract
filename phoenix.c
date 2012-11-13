@@ -603,6 +603,16 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
     printf("Found Phoenix BIOS \"%s\"\n", (char *) (BIOSImage + Offset1));
 
+    /*
+     * For newer Phoenix BIOSes, the BIOS has a trailing block that does not
+     * match the signature as tested in PhoenixModule. We adjust the length
+     * variable to handle that scenario. For example try the new BIOSes for the
+     * SuperMicro motherboards X7DA8 and X7DB8. X7DB8 is supported by Coreboot.
+     */
+    if (BIOSLength > 0x100000 && BIOSOffset > 0) {
+        BIOSLength = BIOSLength + BIOSOffset - 0x100000;
+    }
+
     for (ID = (struct PhoenixID *) (BIOSImage + BCPSegmentOffset + 10);
 	 ((void *) ID < (void *) (BIOSImage + BIOSLength)) && ID->Name[0];
 	 ID = (struct PhoenixID *) (((unsigned char *) ID) + le16toh(ID->Length))) {
