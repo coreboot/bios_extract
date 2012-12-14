@@ -29,6 +29,7 @@ char *strndup(const char *s, size_t n);
 // AIX. It exists on FreeBSD, Linux and Irix.
 #ifdef __linux__
 #include <endian.h>
+#include <sys/stat.h>
 #elif __FreeBSD__
 #include <sys/endian.h>
 #include <sys/stat.h>
