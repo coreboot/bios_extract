@@ -30,6 +30,146 @@
 #include "bios_extract.h"
 #include "lh5_extract.h"
 
+struct bcpHeader {
+	char signature[6];
+	uint8_t major_revision;
+	uint8_t minor_revision;
+	uint16_t length;
+};
+
+/* Our own structure just to store important parameters */
+struct Phoenix {
+	uint8_t version;
+	uint8_t type;
+	uint8_t compression;
+};
+
+static struct Phoenix phx = {0,0,0};
+
+#define COMP_LZSS 0
+#define COMP_LZARI 1
+#define COMP_LZHUF 2
+#define COMP_LZINT 3
+
+struct bcpCompress {
+	struct bcpHeader head;
+	uint8_t flags;
+	uint8_t alg;
+	uint16_t unc_start_offset;
+	uint32_t size_comp_data;
+	uint16_t bcpiRamBiosStart;
+	uint16_t bcpiWorkAreaStart;
+	uint16_t bcpiLowMemStart;
+	uint16_t bcpiLowMemSize;
+	uint8_t commonCharacterLZSS;
+	uint16_t oldRamBiosStart;
+	uint16_t oldSetupScanStart;
+	uint16_t oldSetupScanSize;
+};
+
+
+#define GUID_FFVMODULE "FED91FBA-D37B-4EEA-8729-2EF29FB37A78"
+#define GUID_ESCD "FD21E8FD-2525-4A95-BB90-47EC5763FF9E"
+#define GUID_RAWCODE "F6AE0F63-5F8C-4316-A2EA-76B9AF762756"
+
+/* -------------- Phoenix module file type parsing -------------- */
+
+/* See http://wiki.phoenix.com/wiki/index.php/EFI_FV_FILETYPE for
+ * additional information */
+
+struct PhoenixFFVFileType
+{
+	uint8_t Id;
+	char *Name;
+};
+
+static struct PhoenixFFVFileType
+PhoenixFFVFileTypes[] = {
+	{0x00, "ALL"},
+	{0x01, "BIN"},
+	{0x02, "SECTION"},
+	{0x03, "CEIMAIN"},
+	{0x04, "PEIMAIN"},
+	{0x05, "DXEMAIN"},
+	{0x06, "PEI"},
+	{0x07, "DXE"},
+	{0x08, "COMBINED_PEIM_DRIVER"},
+	{0x09, "APP"},
+	{0x0B, "FFV"},
+	{0xC2, "CEI"},
+	{0xC3, "XIP"},
+	{0xC4, "BB"},
+	{0xD0, "SDXE"},
+	{0xD1, "DXESDXE"},
+	{0xF0, "GAP"},
+	{0, NULL},
+};
+
+static char* get_file_type(uint8_t id)
+{
+	short i = 0;
+	while  (PhoenixFFVFileTypes[i].Name != NULL) {
+		if (PhoenixFFVFileTypes[i].Id == id)
+			return PhoenixFFVFileTypes[i].Name;
+		i++;
+	}
+	return "UNKNOWN";
+}
+
+/* -------------- Phoenix section file type parsing -------------- */
+
+/* See http://wiki.phoenix.com/wiki/index.php/EFI_SECTION_TYPE for
+ * additional information */
+
+struct PhoenixFFVSectionType
+{
+	uint8_t Id;
+	char *Name;
+};
+
+static struct PhoenixFFVSectionType
+PhoenixFFVSectionTypes[] = {
+	{0x01, "COMPRESSION"},
+	{0x02, "GUID_DEFINED"},
+	{0x10, "PE32"},
+	{0x11, "PIC"},
+	{0x12, "TE"},
+	{0x13, "DXE_DEPEX"},
+	{0x14, "VERSION"},
+	{0x15, "USER_INTERFACE"},
+	{0x16, "COMPATIBILITY16"},
+	{0x17, "FIRMWARE_VOLUME_IMAGE"},
+	{0x18, "FREEFORM_SUBTYPE_GUID"},
+	{0x19, "BIN"},
+	{0x1A, "PE64"},
+	{0x1B, "PEI_DEPEX"},
+	{0xC0, "SOURCECODE"},
+	{0xC1, "FFV"},
+	{0xC2, "RE32"},
+	{0xC3, "XIP16"},
+	{0xC4, "XIP32"},
+	{0xC5, "XIP64"},
+	{0xC6, "PLACE16"},
+	{0xC7, "PLACE32"},
+	{0xC8, "PLACE64"},
+	{0xCF, "PCI_DEVICE"},
+	{0xD0, "PDB"},
+	{0, NULL},
+};
+
+static char* get_section_type(uint8_t id)
+{
+	short i = 0;
+	while  (PhoenixFFVSectionTypes[i].Name != NULL) {
+		if (PhoenixFFVSectionTypes[i].Id == id)
+			return PhoenixFFVSectionTypes[i].Name;
+		i++;
+	}
+	return "UNKNOWN";
+}
+
+/* -------------- Phoenix module name parsing -------------- */
+
 struct PhoenixModuleName
 {
     char Id;
@@ -63,6 +203,7 @@ PhoenixModuleNames[] = {
     {'<', "tcpa_<"},
     {'*', "tcpa_*"},
     {'?', "tcpa_?"},
+    {'$', "biosentry"},
     {'J', "SmartCardPAS"},
 };
 
@@ -75,11 +216,31 @@ struct PhoenixID {
 struct PhoenixFFVModule {
     uint8_t Signature;
     uint8_t Flags;
-    uint16_t Checksum;
+    uint16_t Checksum; /* Can be splitted to header and data checksums */
     uint16_t LengthLo;
     uint8_t LengthHi;
     uint8_t FileType;
-    char Name[16];
+    char Name[16]; /* GUID name */
+};
+
+struct PhoenixFFVSectionHeader {
+	uint16_t SizeLo;
+	uint8_t SizeHi;
+	uint8_t Type;
+};
+
+struct PhoenixFFVCompressionHeader {
+	uint16_t TotalLengthLo;
+	uint8_t TotalLengthHi;
+	uint8_t CompType;
+
+	uint16_t PackedLenLo;
+	uint8_t PackedLenHi;
+	uint8_t Unk2;
+
+	uint16_t RealLenLo;
+	uint8_t RealLenHi;
+	uint8_t Unk3;
 };
 
 static char *
@@ -93,6 +254,25 @@ PhoenixModuleNameGet(char Id)
 
     return NULL;
 }
+
+static void
+phx_write_file(unsigned char *BIOSImage, char* filename, short filetype, int offset, uint32_t length)
+{
+	int fd;
+
+	if (filename[0] == '\0') {
+		sprintf(filename, "%s_0x%08x-0x%08x", get_file_type(filetype), offset, offset + length);
+	}
+	fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+	if (fd < 0) {
+		fprintf(stderr, "Error: unable to open %s: %s\n\n", filename, strerror(errno));
+		return;
+	}
+	write(fd, BIOSImage + offset + 0x18, length - 0x18);
+	close(fd);
+}
+
+/* ---------- Extraction code ---------- */
 
 static int
 PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
@@ -257,23 +437,11 @@ PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
 static int
 PhoenixExtractFFV(unsigned char *BIOSImage, int BIOSLength, int Offset)
 {
-    struct PhoenixFFVCompressionHeader {
-	uint16_t TotalLengthLo;
-	uint8_t TotalLengthHi;
-	uint8_t SectionType;
-
-	uint16_t PackedLenLo;
-	uint8_t PackedLenHi;
-	uint8_t Unk2;
-
-	uint16_t RealLenLo;
-	uint8_t RealLenHi;
-	uint8_t Unk3;
-    } *CompHeader;
-    struct PhoenixFFVModule *Module;
+    struct PhoenixFFVSectionHeader *SectionHeader;
+	struct PhoenixFFVCompressionHeader *CompHeader;
+	struct PhoenixFFVModule *Module;
     char Name[16], filename[24];
     char *ModuleName;
-    int fd;
     uint32_t Length, PackedLen, RealLen;
     unsigned char *RealData;
 
@@ -290,6 +458,8 @@ PhoenixExtractFFV(unsigned char *BIOSImage, int BIOSLength, int Offset)
 		Offset);
 	return 1;
     }
+
+	/* TODO: Improve module name parsing */
 
     if (Module->FileType == 0xF0) {
 	strcpy(Name, "GAP");
@@ -319,73 +489,65 @@ PhoenixExtractFFV(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	}
     }
 
-    printf("\t%-15s (%08X-%08X) %08X %02X %02X %s\n",
-	   Name, Offset, Offset + Length, Length, Module->Flags, Module->FileType, filename
-    );
+    printf("\t%-15s (%08X-%08X) %08X %02X %02X %s [%s]\n",
+	   Name, Offset, Offset + Length, Length, Module->Flags, Module->FileType, filename, get_file_type(Module->FileType));
 
     switch (Module->FileType) {
     case 0xF0:
-	break;
+		break;
 
-    case 0xD0:
-    case 0xC4:
-    case 0xC3:
-    case 0x0B:
-    case 0x09:
-    case 0x08:
-    case 0x07:
-    case 0x06:
-    case 0x05:
-    case 0x04:
-    case 0x03:
-	break;
-
+	/* ---------- SECTION file type ----------*/
     case 0x02:
-	if (Name[1] == 'G' || !*filename) {
-	    break;
-	}
-	else {
-	    CompHeader = (struct PhoenixFFVCompressionHeader *) (BIOSImage + Offset + 0x18);
-	}
-	/* some blocks have a (8 byte?) header we need to skip */
-	if (CompHeader->TotalLengthLo != Length - 0x18 && CompHeader->Unk3) {
-	    /* FIXME more advanced parsing of sections */
-	    CompHeader = (struct PhoenixFFVCompressionHeader *)
-		((unsigned char *)CompHeader + CompHeader->TotalLengthLo);
-	}
-	PackedLen = (CompHeader->PackedLenHi << 16) | CompHeader->PackedLenLo;
-	RealLen = (CompHeader->RealLenHi << 16) | CompHeader->RealLenLo;
-	if (!RealLen) { /* FIXME temporary hack */
-	    break;
-	}
-	RealData = MMapOutputFile(filename, RealLen);
-	if (!RealData) {
-	    fprintf(stderr, "Failed to mmap file for uncompressed data.\n");
-	    break;
-	}
-	LH5Decode((unsigned char *)CompHeader + sizeof(struct PhoenixFFVCompressionHeader),
-		  PackedLen, RealData, RealLen);
-	munmap(RealData, RealLen);
-	break;
+		SectionHeader = (struct PhoenixFFVSectionHeader *) (BIOSImage + Offset + 0x18);
+		if (Name[1] == 'G' || !*filename) {
+			break;
+		}
+		/* COMPRESSION section */
+		if (SectionHeader->Type == 0x01) {
+			CompHeader = (struct PhoenixFFVCompressionHeader *) (BIOSImage + Offset + 0x18);
+			/* some blocks have a (8 byte?) header we need to skip */
+			if (CompHeader->TotalLengthLo != Length - 0x18 && CompHeader->Unk3) {
+				/* FIXME more advanced parsing of sections */
+				CompHeader = (struct PhoenixFFVCompressionHeader *)
+					((unsigned char *)CompHeader + CompHeader->TotalLengthLo);
+			}
+			PackedLen = (CompHeader->PackedLenHi << 16) | CompHeader->PackedLenLo;
+			RealLen = (CompHeader->RealLenHi << 16) | CompHeader->RealLenLo;
+			//printf("CompHeader->Type = %d\n", CompHeader->CompType);
 
-    case 0x01:
-	if (!*filename) { /* FIXME temporary hack */
-	    break;
-	}
-	fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-	if (fd < 0) {
-	    fprintf(stderr, "Error: unable to open %s: %s\n\n", filename, strerror(errno));
-	    break;
-	}
-	write(fd, BIOSImage + Offset + 0x18, Length - 0x18);
-	close(fd);
-	break;
+			if (CompHeader->CompType == 0) /* Not compressed at all */
+				break;
 
-    default:
-	fprintf(stderr, "\t\tUnsupported file type!\n");
-	break;
-    }
+			if (!RealLen) /* FIXME temporary hack */
+				break;
 
+			RealData = MMapOutputFile(filename, RealLen);
+			if (!RealData) {
+				fprintf(stderr, "Failed to mmap file for uncompressed data.\n");
+				break;
+			}
+			if ((phx.compression == COMP_LZHUF) || (phx.compression == COMP_LZINT)) {
+				if (LH5Decode((unsigned char *)CompHeader + sizeof(struct PhoenixFFVCompressionHeader),
+						PackedLen, RealData, RealLen) == -1) {
+					munmap(RealData, RealLen);
+					fprintf(stderr, "Failed to uncompress section with LHA5.\n");
+					/* dump original section in this case */
+					phx_write_file(BIOSImage, filename, Module->FileType, Offset, Length);
+				} else
+					printf("COMPRESSED\n");
+			} else
+				printf("Unsupported compression!\n");
+			munmap(RealData, RealLen);
+			break;
+		}
+		printf("\t\tSECTION: %s\n", get_section_type(SectionHeader->Type));
+		phx_write_file(BIOSImage, filename, Module->FileType, Offset, Length);
+		break;
+
+	default:
+		phx_write_file(BIOSImage, filename, Module->FileType, Offset, Length);
+		break;
+	}
     return Length;
 }
 
@@ -501,14 +663,14 @@ PhoenixVolume2(unsigned char *BIOSImage, int BIOSLength, int Offset)
 		ModNum, Base, Base + Length, guid
 	);
 
-	if (!strcmp(guid, "FED91FBA-D37B-4EEA-8729-2EF29FB37A78")) {
+	if (!strcmp(guid, GUID_FFVMODULE)) {
 	    /* FFV modules */
 	    Offset = Base;
 	    while (Offset < Base + Length) {
 		Offset += PhoenixExtractFFV(BIOSImage, BIOSLength, Offset);
 	    }
 	}
-	else if (!strcmp(guid, "FD21E8FD-2525-4A95-BB90-47EC5763FF9E")) {
+	else if (!strcmp(guid, GUID_ESCD)) {
 	    /* Extended System Configuration Data (and similar?) */
 	    printf("\tESCD\n");
 	    fd = open("ESCD.bin", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
@@ -519,7 +681,7 @@ PhoenixVolume2(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	    write(fd, BIOSImage + Base, Length);
 	    close(fd);
 	}
-	else if (!strcmp(guid, "F6AE0F63-5F8C-4316-A2EA-76B9AF762756")) {
+	else if (!strcmp(guid, GUID_RAWCODE)) {
 	    /* Raw BIOS code */
 	    printf("\tHole (raw code)\n");
 	    snprintf(Name, sizeof(Name), "hole_%02x.bin", HoleNum++);
@@ -532,7 +694,7 @@ PhoenixVolume2(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	    close(fd);
 	}
 	else {
-	    fprintf(stderr, "\tUnknown FFV module GUID!\n");
+	    fprintf(stderr, "\tUnknown FFV module GUID: %s\n", guid);
 	}
     }
 }
@@ -590,7 +752,6 @@ PhoenixFFV(unsigned char *BIOSImage, int BIOSLength, struct PhoenixID *FFV)
 
     return TRUE;
 }
-
 /*
  *
  */
@@ -602,6 +763,9 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
     uint32_t Offset;
 
     printf("Found Phoenix BIOS \"%s\"\n", (char *) (BIOSImage + Offset1));
+
+    /* TODO: Print more information about image */
+    /* TODO: Group modules by firmware volumes */
 
     /*
      * For newer Phoenix BIOSes, the BIOS has a trailing block that does not
@@ -617,23 +781,37 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	 ((void *) ID < (void *) (BIOSImage + BIOSLength)) && ID->Name[0];
 	 ID = (struct PhoenixID *) (((unsigned char *) ID) + le16toh(ID->Length))) {
 #if 0
-	printf("PhoenixID: Name %c%c%c%c%c%c, Flags 0x%04X, Length %d\n",
+		printf("PhoenixID: Name %c%c%c%c%c%c, Flags 0x%04X, Length %d\n",
 	       ID->Name[0],  ID->Name[1], ID->Name[2],  ID->Name[3],
 	       ID->Name[4],  ID->Name[5], le16toh(ID->Flags), le16toh(ID->Length));
 #endif
-	if (!strncmp(ID->Name, "BCPSYS", 6))
-	    SYS = ID;
-	else if (!strncmp(ID->Name, "BCPFFV", 6))
-	    FFV = ID;
+		if (!strncmp(ID->Name, "BCPSYS", 6)) {
+		    SYS = ID;
+			break;
+		} else if (!strncmp(ID->Name, "BCPFFV", 6)) {
+		    FFV = ID;
+			break;
+		}
     }
 
     if (!SYS) {
-	fprintf(stderr, "Error: Failed to locate BCPSYS offset.\n");
-	return FALSE;
-    }
+		fprintf(stderr, "Error: Failed to locate BCPSYS offset.\n");
+		return FALSE;
+
+	}
+
+	/* BCPCMP parsing */
+
+	unsigned char *bcpcmp = memmem(BIOSImage, BIOSLength - 6, "BCPCMP", 6);
+	if (!bcpcmp) {
+		fprintf(stderr, "Error: Failed to locate BCPCMP offset.\n");
+		return FALSE;
+	}
+	uint32_t bcpoff = bcpcmp - BIOSImage;
+	struct bcpCompress *bcpComp = (struct bcpCompress *) (BIOSImage + bcpoff);
+	phx.compression = bcpComp->alg;
 
     /* Get some info */
-    {
 	char Date[9], Time[9], Version[9];
 
 	strncpy(Date, ((char *) SYS) + 0x0F, 8);
@@ -644,7 +822,6 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	Version[8] = 0;
 
 	printf("Version \"%s\", created on %s at %s.\n", Version, Date, Time);
-    }
 
     Offset = le32toh(*((uint32_t *) (((char *) SYS) + 0x77)));
     Offset &= (BIOSLength - 1);

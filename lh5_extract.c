@@ -286,7 +286,7 @@ static unsigned short pt_table[256];   /* decode */
 static unsigned char  c_len[NC];
 static unsigned char  pt_len[NPT];
 
-static void
+static int
 make_table(short nchar, unsigned char bitlen[], short tablebits, unsigned short table[])
 {
     unsigned short  count[17];  /* count of bitlen */
@@ -309,8 +309,8 @@ make_table(short nchar, unsigned char bitlen[], short tablebits, unsigned short 
     for (i = 0; i < nchar; i++) {
         if (bitlen[i] > 16) {
             /* CVE-2006-4335 */
-            fprintf(stderr, "Error: Bad table (case a)");
-            exit(1);
+            fprintf(stderr, "Error: Bad table (case a)\n");
+            return -1;
         }
         else
             count[bitlen[i]]++;
@@ -322,9 +322,9 @@ make_table(short nchar, unsigned char bitlen[], short tablebits, unsigned short 
         start[i] = total;
         total += weight[i] * count[i];
     }
-    if ((total & 0xffff) != 0 || tablebits > 16) { /* 16 for weight below */
-        fprintf(stderr, "Error: make_table(): Bad table (case b)");
-        exit(1);
+    if (((total & 0xffff) != 0) || (tablebits > 16)) { /* 16 for weight below */
+        fprintf(stderr, "Error: make_table(): Bad table (case b)\n");
+        return -1;
     }
 
     /* shift data for make table. */
@@ -380,9 +380,10 @@ make_table(short nchar, unsigned char bitlen[], short tablebits, unsigned short 
         }
         start[k] = l;
     }
+    return 0;
 }
 
-static void
+static int
 read_pt_len(short nn, short nbit, short i_special)
 {
     int           i, c, n;
@@ -419,11 +420,13 @@ read_pt_len(short nn, short nbit, short i_special)
         }
         while (i < nn)
             pt_len[i++] = 0;
-        make_table(nn, pt_len, 8, pt_table);
+        if (make_table(nn, pt_len, 8, pt_table) == -1)
+            return -1;
     }
+    return 0;
 }
 
-static void
+static int
 read_c_len(void)
 {
     short           i, c, n;
@@ -465,8 +468,10 @@ read_c_len(void)
         }
         while (i < NC)
             c_len[i++] = 0;
-        make_table(NC, c_len, 12, c_table);
+        if (make_table(NC, c_len, 12, c_table) == -1)
+            return -1;
     }
+    return 0;
 }
 
 static unsigned short
@@ -517,7 +522,7 @@ decode_p_st1(void)
     return j;
 }
 
-void
+int
 LH5Decode(unsigned char *PackedBuffer, int PackedBufferSize,
 	  unsigned char *OutputBuffer, int OutputBufferSize)
 {
@@ -531,9 +536,12 @@ LH5Decode(unsigned char *PackedBuffer, int PackedBufferSize,
     while (n < OutputBufferSize) {
 	if (blocksize == 0) {
 	    blocksize = getbits(16);
-	    read_pt_len(NT, TBIT, 3);
-	    read_c_len();
-	    read_pt_len(NP, PBIT, -1);
+	    if (read_pt_len(NT, TBIT, 3) == -1)
+			return -1;
+	    if (read_c_len() == -1)
+			return -1;
+	    if (read_pt_len(NP, PBIT, -1) == -1)
+			return -1;
 	}
 	blocksize--;
 
@@ -551,4 +559,5 @@ LH5Decode(unsigned char *PackedBuffer, int PackedBufferSize,
 	    }
         }
     }
+    return 0;
 }

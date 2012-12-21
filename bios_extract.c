@@ -86,6 +86,8 @@ MMapOutputFile(char *filename, int size)
     return Buffer;
 }
 
+/* TODO: Make bios identification more flexible */
+
 static struct {
     char *String1;
     char *String2;
@@ -98,8 +100,10 @@ static struct {
     {"Award BootBlock", "= Award Decompression Bios =", AwardExtract},
     {"Phoenix FirstBIOS", "BCPSEGMENT", PhoenixExtract},
     {"PhoenixBIOS 4.0", "BCPSEGMENT", PhoenixExtract},
+    {"PhoenixBIOS Version", "BCPSEGMENT", PhoenixExtract},
     {"Phoenix ServerBIOS 3", "BCPSEGMENT", PhoenixExtract},
     {"Phoenix TrustedCore", "BCPSEGMENT", PhoenixExtract},
+    {"Phoenix SecureCore", "BCPSEGMENT", PhoenixExtract},
     {NULL, NULL, NULL},
 };
 
