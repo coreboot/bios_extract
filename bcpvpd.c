@@ -39,57 +39,59 @@
 #include "compat.h"
 #include "lzss_extract.h"
 
-int
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
-    int infd, outfd;
-    unsigned char *InputBuffer;
-    int InputBufferSize;
+	int infd, outfd;
+	unsigned char *InputBuffer;
+	int InputBufferSize;
 
-    if (argc != 3) {
-	printf("usage: %s <input file> <output file>\n", argv[0]);
-	return 1;
-    }
+	if (argc != 3) {
+		printf("usage: %s <input file> <output file>\n", argv[0]);
+		return 1;
+	}
 
-    infd = open(argv[1], O_RDONLY);
-    if (infd < 0) {
-	fprintf(stderr, "Error: Failed to open %s: %s\n",
-		argv[1], strerror(errno));
-	return 1;
-    }
+	infd = open(argv[1], O_RDONLY);
+	if (infd < 0) {
+		fprintf(stderr, "Error: Failed to open %s: %s\n", argv[1],
+			strerror(errno));
+		return 1;
+	}
 
-    InputBufferSize = lseek(infd, 0, SEEK_END);
-    if (InputBufferSize < 0) {
-	fprintf(stderr, "Error: Failed to lseek \"%s\": %s\n",
-		argv[1], strerror(errno));
-	return 1;
-    }
+	InputBufferSize = lseek(infd, 0, SEEK_END);
+	if (InputBufferSize < 0) {
+		fprintf(stderr, "Error: Failed to lseek \"%s\": %s\n", argv[1],
+			strerror(errno));
+		return 1;
+	}
 
-    InputBuffer = mmap(NULL, InputBufferSize, PROT_READ, MAP_PRIVATE, infd, 0);
-    if (InputBuffer < 0) {
-	fprintf(stderr, "Error: Failed to mmap %s: %s\n",
-		argv[1], strerror(errno));
-	return 1;
-    }
+	InputBuffer =
+	    mmap(NULL, InputBufferSize, PROT_READ, MAP_PRIVATE, infd, 0);
+	if (InputBuffer < 0) {
+		fprintf(stderr, "Error: Failed to mmap %s: %s\n", argv[1],
+			strerror(errno));
+		return 1;
+	}
 
-    if (InputBufferSize < 0x52) {
-	fprintf(stderr, "Error: \"%s\" is too small tp be a BCPVPD file.\n",
-		argv[1]);
-	return 1;
-    }
+	if (InputBufferSize < 0x52) {
+		fprintf(stderr,
+			"Error: \"%s\" is too small tp be a BCPVPD file.\n",
+			argv[1]);
+		return 1;
+	}
 
-    if (strncmp((char *) InputBuffer, "BCPVPD", 7)) {
-	fprintf(stderr, "Error: unable to find BCPVPD header in \"%s\".\n",
-		argv[1]);
-	return 1;
-    }
+	if (strncmp((char *)InputBuffer, "BCPVPD", 7)) {
+		fprintf(stderr,
+			"Error: unable to find BCPVPD header in \"%s\".\n",
+			argv[1]);
+		return 1;
+	}
 
-    outfd = open(argv[2], O_RDWR | O_TRUNC | O_CREAT, S_IRWXU);
-    if (outfd  == -1) {
-        fprintf(stderr, "Error: Failed to open \"%s\": %s\n",
-                argv[2], strerror(errno));
-        return 1;
-    }
+	outfd = open(argv[2], O_RDWR | O_TRUNC | O_CREAT, S_IRWXU);
+	if (outfd == -1) {
+		fprintf(stderr, "Error: Failed to open \"%s\": %s\n", argv[2],
+			strerror(errno));
+		return 1;
+	}
 
-    return LZSSExtract(InputBuffer + 0x52, InputBufferSize - 0x52, outfd);
+	return LZSSExtract(InputBuffer + 0x52, InputBufferSize - 0x52, outfd);
 }

@@ -49,4 +49,4 @@ Bool PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 Bool AwardExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		  uint32_t Offset1, uint32_t Offset2);
 
-#endif /* BIOS_EXTRACT_H */
+#endif				/* BIOS_EXTRACT_H */

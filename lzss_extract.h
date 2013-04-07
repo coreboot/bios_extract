@@ -21,4 +21,4 @@
 
 int LZSSExtract(unsigned char *Input, int InputSize, int fd);
 
-#endif /* LZSS_EXTRACT_H */
+#endif				/* LZSS_EXTRACT_H */

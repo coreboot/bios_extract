@@ -27,6 +27,6 @@ unsigned int LH5HeaderParse(unsigned char *Buffer, int BufferSize,
 unsigned short CRC16Calculate(unsigned char *Buffer, int BufferSize);
 
 int LH5Decode(unsigned char *PackedBuffer, int PackedBufferSize,
-	       unsigned char *OutputBuffer, int OutputBufferSize);
+	      unsigned char *OutputBuffer, int OutputBufferSize);
 
-#endif /* LH5_EXTRACT_H */
+#endif				/* LH5_EXTRACT_H */

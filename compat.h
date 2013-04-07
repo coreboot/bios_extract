@@ -19,7 +19,8 @@
  */
 
 #ifdef __APPLE__
-void *memmem(const void *haystack, size_t haystacklen, const void *needle, size_t needlelen);
+void *memmem(const void *haystack, size_t haystacklen, const void *needle,
+	     size_t needlelen);
 size_t strnlen(const char *s, size_t maxlen);
 char *strndup(const char *s, size_t n);
 #endif
@@ -45,5 +46,3 @@ char *strndup(const char *s, size_t n);
 #define le16toh(x) bswap_16(x)
 #endif
 #endif
-
-

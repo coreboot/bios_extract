@@ -25,8 +25,8 @@
 void *memmem(const void *haystack, size_t haystacklen, const void *needle,
 	     size_t needlelen)
 {
-	char *searchpointer = (char *) haystack;
-	char *patternpointer = (char *) needle;
+	char *searchpointer = (char *)haystack;
+	char *patternpointer = (char *)needle;
 	char *endofsearch = searchpointer + haystacklen - needlelen;
 
 	if (!(haystack && needle && haystacklen && needlelen))
@@ -34,11 +34,9 @@ void *memmem(const void *haystack, size_t haystacklen, const void *needle,
 
 	while (searchpointer <= endofsearch) {
 		if (*searchpointer == *patternpointer)
-			if (memcmp
-			    (searchpointer, patternpointer,
-			     needlelen) == 0)
+			if (memcmp(searchpointer, patternpointer, needlelen) ==
+			    0)
 				return searchpointer;
-
 		searchpointer++;
 	}
 
