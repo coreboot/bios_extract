@@ -4,11 +4,9 @@ import sys
 import os
 from struct import unpack
 
-efidecomp_path = os.path.dirname(os.path.realpath(__file__)) + "/efidecomp"
 fvh_count = 0
 
 ### Formatting: GUIDs
-
 
 def format_guid(guid_s):
     parts = unpack("<LHH8B", guid_s)
@@ -16,17 +14,15 @@ def format_guid(guid_s):
 
 ### Formatting: file types
 
-filetypes = ("ALL ", "RAW ", "FREE", "SECc", "PEIc", "DXEc", "PEIM",
-             "DRVR", "CPDR", "APPL", "??0A", "FVIM")
-filetype_exts = ("all", "raw", "free", "seccore", "peicore", "dxecore",
-                 "peim", "drv", "comb_peim_drv", "app", "unkn0a", "fd")
-
+filetypes = ("ALL ", "RAW ", "FREE", "SECc", "PEIc", "DXEc", "PEIM", "DRVR", "CPDR", "APPL", "SMM", "FVIM", "SMMDXE", "SMMCORE")
+filetype_exts = ("all", "raw", "free", "seccore", "peicore", "dxecore", "peim", "drv", "comb_peim_drv", "app", "unkn0a", "fd")
 
 def format_filetype(filetype_num):
     if filetype_num < len(filetypes):
         return filetypes[filetype_num]
+    if filetype_num == 0xF0:
+        return "PAD"
     return "??%02X" % filetype_num
-
 
 def extention_filetype(filetype_num):
     if filetype_num < len(filetype_exts):
@@ -35,29 +31,28 @@ def extention_filetype(filetype_num):
 
 ### Main function to analyze a host disk file
 
-
-def analyze_diskfile(filename):
+def analyze_diskfile(filename, offset = 0):
     f = file(filename, "rb")
     fvdata = f.read()
     f.close()
-
+    
     print "Analyzing %s, 0x%X bytes" % (filename, len(fvdata))
-
-    if fvdata[0:16] == "\xBD\x86\x66\x3B\x76\x0D\x30\x40\xB7\x0E\xB5\x51\x9E\x2F\xC5\xA0":
+    
+    if fvdata[offset:offset+16] == "\xBD\x86\x66\x3B\x76\x0D\x30\x40\xB7\x0E\xB5\x51\x9E\x2F\xC5\xA0":
         # EFI capsule
-        (capguid, capheadsize, capflags, capimagesize, capseqno, capinstance, capsplitinfooffset, capbodyoffset, cap3offset, cap4offset, cap5offset, cap6offset, cap7offset, cap8offset) = unpack("< 16s L L L L 16s L L 6L", fvdata[0:80])
+        (capguid, capheadsize, capflags, capimagesize, capseqno, capinstance, capsplitinfooffset, capbodyoffset, cap3offset, cap4offset, cap5offset, cap6offset, cap7offset, cap8offset) = unpack("< 16s L L L L 16s L L 6L", fvdata[offset:offset+80])
         print "EFI Capsule, %d bytes" % capimagesize
-        handle_fv(fvdata[capbodyoffset:capbodyoffset +
-                  capimagesize], format_guid(capguid))
-
+        handle_fv(fvdata[offset+capbodyoffset:offset+capbodyoffset+capimagesize], format_guid(capguid))
+        
     else:
         # treat as sequence of firmware volumes
-        while True:
-            usedsize = handle_fv(fvdata)
-            if usedsize >= len(fvdata):
-                break
+        while offset < len(fvdata):
+            print "offset: %08X" % offset
+            usedsize = handle_fv(fvdata[offset:], "%08X" % offset)
+            if usedsize == 0:
+                offset += 0x10000
             else:
-                fvdata = fvdata[usedsize:]
+                offset += usedsize
 
 ### Handle a firmware volume
 
@@ -65,12 +60,18 @@ def analyze_diskfile(filename):
 def handle_fv(fvdata, name='default'):
 
     ### Check header
-
-    (fvzero, fvfstype, fvlen, fvsig, fvattr, fvhdrlen, fvchecksum,
-     fvrev) = unpack("< 16s 16s Q 4s L H H 3x B", fvdata[0:0x38])
-    if fvsig != "_FVH":
-        print "Not a EFI firmware volume (sig missing)"
-        return 0
+    
+    (fvzero, fvfstype, fvlen, fvsig, fvattr, fvhdrlen, fvchecksum, fvrev) = unpack("< 16s 16s Q 4s L H H 3x B", fvdata[0:0x38])
+    if fvsig != "_FVH" and fvfstype != '\xD9\x54\x93\x7A\x68\x04\x4A\x44\x81\xCE\x0B\xF6\x17\xD8\x90\xDF':
+        if fvdata[0] == '\xFF':
+            print "Skipping FFs"
+            offset = 0
+            while fvdata[offset] == '\xFF':
+                offset += 1
+            return offset
+        else:
+            print "Not a EFI firmware volume (sig and GUID missing)"
+            return 0
     if fvlen > len(fvdata):
         print "WARNING: File too short, header gives length as 0x%X bytes" % fvlen
     else:
@@ -81,7 +82,10 @@ def handle_fv(fvdata, name='default'):
     #fvhdir = "fvh-%d" % fvh_count
     fvhdir = "fvh-" + name
     fvh_count = fvh_count + 1
-    os.mkdir(fvhdir)
+    try:
+      os.mkdir(fvhdir)
+    except:
+      pass
     os.chdir(fvhdir)
 
     ### Decode files
@@ -98,9 +102,8 @@ def handle_fv(fvdata, name='default'):
             print "-----"
             print "End of volume (size reached uncleanly)"
             break
-
-        (fileguid, fileintcheck, filetype, fileattr, filelenandstate) = unpack(
-            "< 16s H B B L", fvdata[offset:offset + 24])
+        
+        (fileguid, fileintcheck, filetype, fileattr, filelenandstate) = unpack("< 16s H B B L", fvdata[offset:offset+24])
         if filetype == 0xff:
             print "-----"
             print "End of volume (filler data found)"
@@ -115,29 +118,51 @@ def handle_fv(fvdata, name='default'):
         fileoffset = offset + 24
         nextoffset = (offset + fileentrylen + 7) & ~7
 
-        filedata = fvdata[fileoffset:fileoffset + filelen]
+        print "%08X %08X" % (fileoffset, nextoffset)
+        
+        filedata = fvdata[fileoffset:fileoffset+filelen]
         compressed = False
-        if filetype != 1 and filedata[3] == "\x01":
+        if filetype != 1 and filelen > 3 and filedata[3] == "\x01":
             compressed = True
             filedata = decompress(filedata)
 
         if compressed:
-            print "%s  %s  C %d (%d)" % (format_guid(
-                fileguid), format_filetype(filetype), len(filedata), filelen)
+            print "%08X %s  %s  C %d (%d)" % (offset, format_guid(fileguid), format_filetype(filetype), len(filedata), filelen)
         else:
-            print "%s  %s  U %d" % (
-                format_guid(fileguid), format_filetype(filetype), filelen)
-
-        handle_file("file-%s.%s" % (format_guid(
-            fileguid), extention_filetype(filetype)), filetype, filedata)
-
+            print "%08X %s  %s  U %d" % (offset, format_guid(fileguid), format_filetype(filetype), filelen)
+        
+        if filetype != 0xF0:
+          handle_file("file-%s.%s" % (format_guid(fileguid), extention_filetype(filetype)), filetype, filedata)
+        else:
+          print "(skipping)"
+        
         offset = nextoffset
 
     os.chdir('..')
     return fvlen
 
+if sys.platform == 'win32':
+  efidecomp_path = os.path.join(os.path.dirname(__file__), "UEFI_Decompressor")
+  efidecomp_cmd = '"%s" %s %s'
+else:
+  efidecomp_path = os.path.dirname(os.path.realpath(__file__)) + "/efidecomp"
+  efidecomp_cmd = "%s < %s > %s"
+
 ### Handle decompression of a compressed section
 
+def decompress2(compdata):
+    f = file("_tmp_decompress", "wb")
+    f.write(compdata)
+    f.close()
+    
+    cmd = efidecomp_cmd % ( efidecomp_path, '_tmp_decompress', '_tmp_result')
+    print "cmd: %r" % cmd
+    os.system(cmd)
+    
+    f = file("_tmp_result", "rb")
+    decompdata = f.read()
+    f.close()
+    return decompdata
 
 def decompress(compdata):
     (sectlenandtype, uncomplen, comptype) = unpack("< L L B", compdata[0:9])
@@ -146,28 +171,41 @@ def decompress(compdata):
         print "WARNING: Compressed section is not the only section! (%d/%d)" % (sectlen, len(compdata))
     if comptype == 0:
         return compdata[9:]
-    elif comptype > 2:
-        print "ERROR: Unknown compression type %d" % comptype
-        return compdata
-
-    print "WARNING: this code path might not work"
-    f = file("_tmp_decompress", "wb")
-    if comptype == 1:
+    elif comptype == 1:
+        print "WARNING: this code path might not work";
+        f = file("_tmp_decompress", "wb")
         f.write(compdata[9:])
         f.close()
-        os.system("%s <_tmp_decompress >_tmp_result" % efidecomp_path)
-    else:
-        f.write(compdata[13:sectlen + 4]) # for some reason there is junk in 9:13 that I don't see in the raw files?! yuk.
+        
+        cmd = efidecomp_cmd % ( efidecomp_path, '_tmp_decompress', '_tmp_result')
+        #cmd = "./efidecomp <_tmp_decompress >_tmp_result"
+        os.system(cmd)
+        
+        f = file("_tmp_result", "rb")
+        decompdata = f.read()
         f.close()
+
+        if len(decompdata) < uncomplen:
+            print "WARNING: Decompressed data too short!"
+        return decompdata
+
+    elif comptype == 2:
+        f = file("_tmp_decompress", "wb")
+        f.write(compdata[13:sectlen+4]) # for some reason there is junk in 9:13 that I don't see in the raw files?! yuk.
+        f.close()
+        
         os.system("lzmadec <_tmp_decompress >_tmp_result")
-
-    f = file("_tmp_result", "rb")
-    decompdata = f.read()
-    f.close()
-
-    if len(decompdata) < uncomplen:
-        print "WARNING: Decompressed data too short!"
-    return decompdata
+        
+        f = file("_tmp_result", "rb")
+        decompdata = f.read()
+        f.close()
+        
+        if len(decompdata) < uncomplen:
+            print "WARNING: Decompressed data too short!"
+        return decompdata
+    else:
+        print "ERROR: Unknown compression type %d" % comptype
+        return compdata
 
 ### Handle the contents of one firmware file
 
@@ -180,13 +218,10 @@ def handle_file(filename, filetype, filedata):
     if filetype != 1:
         handle_sections(filename, 0, filedata)
 
-### Handle section data (i.e. multiple sections), recurse if necessary
-
-
-def handle_sections(filename, sectindex, imagedata):
+def get_filename(imagedata):
     imagelen = len(imagedata)
     filename_override = None
-
+    
     # first try to find a filename
     offset = 0
     while offset + 4 <= imagelen:
@@ -204,7 +239,16 @@ def handle_sections(filename, sectindex, imagedata):
             print "  Filename '%s'" % filename_override
 
         offset = nextoffset
+    return filename_override
 
+### Handle section data (i.e. multiple sections), recurse if necessary
+
+def handle_sections(filename, sectindex, imagedata):
+    imagelen = len(imagedata)
+
+    # first try to find a filename
+    filename_override = get_filename(imagedata)
+   
     # then analyze the sections for good
     offset = 0
     while offset + 4 <= imagelen:
@@ -216,8 +260,7 @@ def handle_sections(filename, sectindex, imagedata):
         datalen = sectlen - 4
 
         if secttype == 2:
-            (sectguid, sectdataoffset, sectattr) = unpack(
-                "< 16s H H", imagedata[offset + 4:offset + 24])
+            (sectguid, sectdataoffset, sectattr) = unpack("< 16s H H", imagedata[offset+4:offset+24])
             dataoffset = offset + sectdataoffset
             datalen = sectlen - sectdataoffset
             if sectguid == "\xB0\xCD\x1B\xFC\x31\x7D\xAA\x49\x93\x6A\xA4\x60\x0D\x9D\xD0\x83":
@@ -229,12 +272,23 @@ def handle_sections(filename, sectindex, imagedata):
                 sectindex += 1
                 sectindex = handle_sections(filename, sectindex, imagedata[
                                             dataoffset:dataoffset + datalen])
+        elif secttype == 1: # compressed
+            sectdata = imagedata[dataoffset:dataoffset+datalen]
+            decdata = decompress2(sectdata)
+            print "  %02d  COMPRESSED %d => %d" % (sectindex, datalen, len(decdata))
+            if filename_override == None:
+                filename_override = get_filename(decdata)
+            sectindex += 1
+            sectindex = handle_sections(filename, sectindex, decdata)
         else:
             secttype_name = "UNKNOWN(%02X)" % secttype
             ext = "data"
             sectdata = imagedata[dataoffset:dataoffset + datalen]
             extraprint = ""
-
+            
+            if secttype == 0x1:
+                secttype_name = "COMPRESSED"
+                ext = "comp"
             if secttype == 0x10:
                 secttype_name = "PE32"
                 ext = "efi"
@@ -246,10 +300,10 @@ def handle_sections(filename, sectindex, imagedata):
                 ext = "te"
             elif secttype == 0x13:
                 secttype_name = "DXE_DEPEX"
-                ext = None
+                ext = "depex"
             elif secttype == 0x14:
                 secttype_name = "VERSION"
-                ext = None
+                ext = "ver"
             elif secttype == 0x15:
                 secttype_name = "USER_INTERFACE"
                 ext = None
@@ -261,7 +315,7 @@ def handle_sections(filename, sectindex, imagedata):
                 ext = "fd"
             elif secttype == 0x18:
                 secttype_name = "FREEFORM_SUBTYPE_GUID"
-                ext = None
+                ext = "guid"
             elif secttype == 0x19:
                 secttype_name = "RAW"
                 ext = "raw"
@@ -297,12 +351,12 @@ def handle_sections(filename, sectindex, imagedata):
 ### main code
 
 if __name__ == '__main__':
-    if not (os.path.isfile(efidecomp_path) and os.access(efidecomp_path, os.X_OK)):
-        print "ERROR: %s is not executable!" % efidecomp_path
-        exit(1)
-
     if len(sys.argv) > 1:
-        for filename in sys.argv[1:]:
-            analyze_diskfile(filename)
+        filename = sys.argv[1]
+        if len(sys.argv) > 2:
+            offset = int(sys.argv[2], 16)
+        else:
+            offset = 0
+        analyze_diskfile(filename, offset)
     else:
-        print "No file specified, giving up"
+        print "Usage: xfv.py bios.rom [start offset]"
