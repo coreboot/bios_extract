@@ -13,6 +13,10 @@ bcpvpd:
 Extracts IBM compressed BIOS images (BCPVPD and $IBMCOMP) so that bios_extract
 can handle it.
 
+decap.sh:
+------
+A simple shell script to remove headers of UEFI Capsule files.
+
 lh5_test:
 ---------
 Sample program left over from development, but kept to be able to easily
