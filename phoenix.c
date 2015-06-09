@@ -826,10 +826,12 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 #endif
 		if (!strncmp(ID->Name, "BCPSYS", 6)) {
 			SYS = ID;
-			break;
+			if (FFV)
+				break;
 		} else if (!strncmp(ID->Name, "BCPFFV", 6)) {
 			FFV = ID;
-			break;
+			if (SYS)
+				break;
 		}
 	}
 
