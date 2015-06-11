@@ -540,6 +540,9 @@ LH5Decode(unsigned char *PackedBuffer, int PackedBufferSize,
 			int length = c - 256 + THRESHOLD;
 			int offset = 1 + decode_p_st1();
 
+			if (offset > n)
+				return -1;
+
 			for (i = 0; i < length; i++) {
 				OutputBuffer[n] = OutputBuffer[n - offset];
 				n++;
