@@ -688,10 +688,10 @@ class FfsVolume:
         while True:
             while pos < maxpos and self.infile[pos] in ['\xFF', '\x00']:
                 pos += 1
-            if self.infile[pos] != '\xF8':
-                return
             if pos >= maxpos:
                 break
+            if self.infile[pos] != '\xF8':
+                return
             ff = FfsFile(self.infile, pos)
             pos = ff.get_endpos()
             self.files.append(ff)
