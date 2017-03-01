@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 # HP Compaq 6715b ROM unpacker by roxfan
 # compressed data begins like this:
 # 0000010000: 01 00 14 01 70 00 00 00 | 60 00 00 00 00 00 02 00  O .Op   .     O

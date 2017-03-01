@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 # Dell/Phoenix ROM BIOS PLUS unpacker
 # 2012-09-12 version 0.1
 # 2012-10-10 version 0.2 added support for older BIOSes with 16-bit length (Dell Inspiron 1100)

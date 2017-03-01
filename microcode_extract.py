@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 # extract microcode updates from binary BIOS files
 # v 0.1 2012/07/23
 # v 0.2 2012/07/23 added VIA Nano support (relaxed some checks)

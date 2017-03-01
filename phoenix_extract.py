@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 # Phoenix FFV BIOS dumper/extractor by roxfan
 # 2012-09-12 version 0.1
 # 3-clause BSD license
