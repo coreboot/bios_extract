@@ -25,6 +25,19 @@ LH5_TEST_OBJS = lh5_extract.o lh5_test.o
 lh5_test: $(LH5_TEST_OBJS)
 	$(CC) $(CFLAGS) $(LH5_TEST_OBJS) -o lh5_test
 
+gitconfig:
+	[ -d .git ]
+	mkdir -p .git/hooks
+	for hook in commit-msg pre-commit ; do							\
+		if [ util/gitconfig/$$hook -nt .git/hooks/$$hook -o				\
+		! -x .git/hooks/$$hook ]; then				       			\
+			sed -e "s,%MAKE%,$(MAKE),g" util/gitconfig/$$hook > .git/hooks/$$hook;	\
+			chmod +x .git/hooks/$$hook;		  				\
+		fi;			  							\
+	done
+	git config remote.origin.push HEAD:refs/for/master
+	(git config --global --includes user.name >/dev/null && git config --global --includes user.email >/dev/null) || (printf 'Please configure your name and email in git:\n\n git config --global user.name "Your Name Comes Here"\n git config --global user.email your.email@example.com\n'; exit 1)
+
 clean: 
 	rm -f *.o
 	rm -f bios_extract
@@ -33,4 +46,4 @@ clean:
 	rm -f ami_slab
 	rm -f xfv/efidecomp xfv/*.o
 
-.PHONY: all bios_extract bcpvpd ami_slab efidecomp lh5_test clean
+.PHONY: all bios_extract bcpvpd ami_slab efidecomp lh5_test clean gitconfig
