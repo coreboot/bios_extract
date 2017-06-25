@@ -19,6 +19,8 @@
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <inttypes.h>
 #include <errno.h>
@@ -26,6 +28,7 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "bios_extract.h"
 #include "compat.h"
@@ -162,8 +165,23 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		return FALSE;
 	}
 
-	/* now the individual modules */
-	abc = (struct abc *)(BIOSImage + ABCOffset);
+	if (ABCOffset + sizeof (struct abc) < BIOSLength) {
+		abc = (struct abc *)(BIOSImage + ABCOffset);
+		if (memcmp (abc->Version, "AMIN", 4) == 0) {
+			/* Skip to next one if immediately followed by "AMINCBLK"
+			 * header in place of a version number. */
+			abc = (struct abc *)memmem (BIOSImage + ABCOffset + 1,
+				BIOSLength - ABCOffset - 1 - sizeof (struct abc),
+				"AMIBIOSC", 8);
+		}
+	} else
+		abc = NULL;
+
+	if (!abc) {
+		fprintf(stderr,
+			"Error: short read after AMIBIOSC signature.\n");
+		return FALSE;
+	}
 
 	/* Get Date */
 	memcpy(Date, BIOSImage + BIOSLength - 11, 8);
