@@ -95,6 +95,7 @@ static struct {
 	"AMIBOOT ROM", "AMIBIOSC", AMI95Extract}, {
 	"$ASUSAMI$", "AMIBIOSC", AMI95Extract}, {
 	"AMIEBBLK", "AMIBIOSC", AMI95Extract}, {
+	"BootBlock SIO Table", "AMIBIOSC", AMI95Extract}, {
 	"Award BootBlock", "= Award Decompression Bios =", AwardExtract}, {
 	"Award Modular BIOS", "Award Software Inc", AwardExtract}, {
 	"Phoenix FirstBIOS", "BCPSEGMENT", PhoenixExtract}, {
