@@ -806,7 +806,7 @@ def parse_trailer(infile, pos, maxpos):
             break
 
 
-if len(sys.argv) < 1:
+if len(sys.argv) < 2:
     print "Usage: phoenix_scan.py BIOS.BIN [-d] [-t] [-v]"
     print "-d: extract modules into files"
     print "-t: extract the trailer parts"
