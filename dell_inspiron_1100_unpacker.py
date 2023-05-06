@@ -66,6 +66,7 @@ def dell_unpack(indata):
 mod_types = {
     0x01: "Main ROM",
     0x0C: "Microcode update",
+    0x52: "EC firmware"
 }
 
 print("Dell/Phoenix ROM BIOS PLUS unpacker")
@@ -107,7 +108,7 @@ while True:
         break
     data = f[offs:offs+leng]
     offs += leng
-    if type_id != 0xC:
+    if type_id != 0xC and type_id != 0x52:
         odata = dell_unpack(data)
     else:
         odata = data
