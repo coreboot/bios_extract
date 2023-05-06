@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # Dell/Phoenix ROM BIOS PLUS unpacker
 # 2012-09-12 version 0.1
 # 2012-10-10 version 0.2 added support for older BIOSes with 16-bit length (Dell Inspiron 1100)
@@ -61,16 +61,16 @@ def dell_unpack(indata):
             dstoff += count
             srcoff += count
 
-    return dst.tostring()
+    return dst
 
 mod_types = {
     0x01: "Main ROM",
     0x0C: "Microcode update",
 }
 
-print "Dell/Phoenix ROM BIOS PLUS unpacker"
+print("Dell/Phoenix ROM BIOS PLUS unpacker")
 if len(sys.argv) < 2:
-    print "Usage: dell_unpack.py bios.bin [offset]"
+    print("Usage: dell_unpack.py bios.bin [offset]")
     sys.exit(1)
 fname = sys.argv[1]
 offs = 0
@@ -78,32 +78,32 @@ f = open(fname, "rb").read()
 if len(sys.argv) > 2:
     offs = int(sys.argv[2], 16)
 else:
-    offs = f.find("\xF0\x00Copyright 1985-\x02\x04\xF0\x0F8 Phoenix Technologies Ltd.")
+    offs = f.find(b"\xF0\x00Copyright 1985-\x02\x04\xF0\x0F8 Phoenix Technologies Ltd.")
     if offs == -1:
-        print "Does not look like a Dell/Phoenix ROM BIOS PLUS"
+        print("Does not look like a Dell/Phoenix ROM BIOS PLUS")
         sys.exit(2)
-    if f[offs-5] == '\x01':
+    if f[offs-5] == 0x01:
         hlen = 5 # 32-bit length
         offs -= 5
         fmt = "<BI"
-    elif f[offs-3] == '\x01':
+    elif f[offs-3] == 0x01:
         hlen = 3 # 16-bit length
         offs -= 3
         fmt = "<BH"
     else:
-        print "Unhandled format!"
+        print("Unhandled format!")
         sys.exit(1)
-    print "Found compressed module at %08X" % offs
+    print("Found compressed module at %08X" % offs)
 if offs > 0:
     fn = "EC.bin"
-    print "%08X EC code, %08X  %s" % (0, offs, fn)
+    print("%08X EC code, %08X  %s" % (0, offs, fn))
     open(fn, "wb").write(f[:offs])
 while True:
     type_id, leng = struct.unpack(fmt, f[offs:offs+hlen])
-    print "%08X type %02X" % (offs, type_id),
+    print("%08X type %02X" % (offs, type_id), end=" ")
     offs += hlen
     if type_id == 0xFF:
-        print "<end of chain>"
+        print("<end of chain>")
         break
     data = f[offs:offs+leng]
     offs += leng
@@ -111,11 +111,11 @@ while True:
         odata = dell_unpack(data)
     else:
         odata = data
-    print " %08X -> %08X" % (leng, len(odata)),
+    print(" %08X -> %08X" % (leng, len(odata)), end=" ")
     fn = "mod_%02X.bin" % type_id
-    print " %s" % fn,
+    print(" %s" % fn, end=" ")
     if type_id in mod_types:
-        print "(%s)" % mod_types[type_id]
+        print("(%s)" % mod_types[type_id])
     else:
-        print ""
+        print("")
     open(fn, "wb").write(odata)
